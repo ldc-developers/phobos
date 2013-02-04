@@ -26,17 +26,20 @@ import std.algorithm, std.array, std.conv, std.exception, std.format,
     std.typetuple, std.utf;
 version(unittest) import std.file;
 
-version (DigitalMars)
+version( Windows )
 {
-    version (Win32)
+    version( LDC )
+        version = MSVCRT;
+    else version( DigitalMars )
     {
-        // Specific to the way Digital Mars C does stdio
-        version = DIGITAL_MARS_STDIO;
-        import std.c.stdio : __fhnd_info, FHND_WCHAR, FHND_TEXT;
-    }
-    else version (Win64)
-    {
-        version = MICROSOFT_STDIO;
+        version( Win32 )
+        {
+            // Specific to the way Digital Mars C does stdio
+            version = DIGITAL_MARS_STDIO;
+            import std.c.stdio : __fhnd_info, FHND_WCHAR, FHND_TEXT;
+        }
+        else version( Win64 )
+            version = MSVCRT;
     }
 }
 
@@ -61,14 +64,10 @@ version (linux)
 }
 
 version (OSX)
-{
     version = GENERIC_IO;
-}
 
 version (FreeBSD)
-{
     version = GENERIC_IO;
-}
 
 version(Windows)
 {
@@ -79,116 +78,115 @@ version(Windows)
     extern (C) nothrow FILE* _wfopen(in wchar* filename, in wchar* mode);
 }
 
-version (DIGITAL_MARS_STDIO)
+/* **
+ * Under-the-hood C I/O functions, standardized into
+ * a common (GCC) interface:
+ *   fgetc_unlocked, fgetwc_unlocked,
+ *   fputc_unlocked, fputwc_unlocked,
+ *   flockfile, funlockfile.
+ * Use _iobuf* for the unshared version of FILE*,
+ * usable when the FILE is locked.
+ */
+extern (C)
 {
-    extern (C)
+  version( DIGITAL_MARS_STDIO )
+  {
+    int    _fgetc_nlock(_iobuf*);
+    int    _fgetwc_nlock(_iobuf*);
+    int    _fputc_nlock(int, _iobuf*);
+    int    _fputwc_nlock(int, _iobuf*);
+    int    __fp_lock(FILE*);
+    void   __fp_unlock(FILE*);
+
+    alias  _fgetc_nlock  fgetc_unlocked;
+    alias  _fgetwc_nlock fgetwc_unlocked;
+    alias  _fputc_nlock  fputc_unlocked;
+    alias  _fputwc_nlock fputwc_unlocked;
+    alias  __fp_lock     flockfile;
+    alias  __fp_unlock   funlockfile;
+
+    int    setmode(int, int);
+    alias  setmode _setmode;
+    enum   _O_BINARY = 0x8000;
+
+    int    _fileno(FILE* fp) pure { return fp._file; }
+    alias  _fileno fileno;
+  }
+  else version( MSVCRT )
+  {
+    private int _filbuf(_iobuf*);
+    int    _fgetc_nolock(_iobuf* fp)        // defined as C macro
     {
-        /* **
-         * Digital Mars under-the-hood C I/O functions.
-         * Use _iobuf* for the unshared version of FILE*,
-         * usable when the FILE is locked.
-         */
-        int _fputc_nlock(int, _iobuf*);
-        int _fputwc_nlock(int, _iobuf*);
-        int _fgetc_nlock(_iobuf*);
-        int _fgetwc_nlock(_iobuf*);
-        int __fp_lock(FILE*);
-        void __fp_unlock(FILE*);
-
-        int setmode(int, int);
-    }
-    alias _fputc_nlock FPUTC;
-    alias _fputwc_nlock FPUTWC;
-    alias _fgetc_nlock FGETC;
-    alias _fgetwc_nlock FGETWC;
-
-    alias __fp_lock FLOCK;
-    alias __fp_unlock FUNLOCK;
-
-    alias setmode _setmode;
-    enum _O_BINARY = 0x8000;
-    int _fileno(FILE* f) { return f._file; }
-    alias _fileno fileno;
-}
-else version (MICROSOFT_STDIO)
-{
-    extern (C)
-    {
-        /* **
-         * Microsoft under-the-hood C I/O functions
-         */
-        int _fputc_nolock(int, _iobuf*);
-        int _fputwc_nolock(int, _iobuf*);
-        int _fgetc_nolock(_iobuf*);
-        int _fgetwc_nolock(_iobuf*);
-        void _lock_file(FILE*);
-        void _unlock_file(FILE*);
-    }
-    alias _fputc_nolock FPUTC;
-    alias _fputwc_nolock FPUTWC;
-    alias _fgetc_nolock FGETC;
-    alias _fgetwc_nolock FGETWC;
-
-    alias _lock_file FLOCK;
-    alias _unlock_file FUNLOCK;
-}
-else version (GCC_IO)
-{
-    /* **
-     * Gnu under-the-hood C I/O functions; see
-     * http://gnu.org/software/libc/manual/html_node/I_002fO-on-Streams.html
-     */
-    extern (C)
-    {
-        int fputc_unlocked(int, _iobuf*);
-        int fputwc_unlocked(wchar_t, _iobuf*);
-        int fgetc_unlocked(_iobuf*);
-        int fgetwc_unlocked(_iobuf*);
-        void flockfile(FILE*);
-        void funlockfile(FILE*);
-        ptrdiff_t getline(char**, size_t*, FILE*);
-        ptrdiff_t getdelim (char**, size_t*, int, FILE*);
-
-        private size_t fwrite_unlocked(const(void)* ptr,
-                size_t size, size_t n, _iobuf *stream);
+        if (--fp._cnt >= 0)
+            return *fp._ptr++;
+        else
+            return _filbuf(fp);
     }
 
-    alias fputc_unlocked FPUTC;
-    alias fputwc_unlocked FPUTWC;
-    alias fgetc_unlocked FGETC;
-    alias fgetwc_unlocked FGETWC;
-
-    alias flockfile FLOCK;
-    alias funlockfile FUNLOCK;
-}
-else version (GENERIC_IO)
-{
-    extern (C)
+    private int _flsbuf(int, _iobuf*);
+    int    _fputc_nolock(int c, _iobuf* fp) // defined as C macro
     {
-        void flockfile(FILE*);
-        void funlockfile(FILE*);
+        if (--fp._cnt >= 0)
+            return *fp._ptr++ = cast(char) c;
+        else
+            return _flsbuf(c, fp);
     }
 
-    int fputc_unlocked(int c, _iobuf* fp) { return fputc(c, cast(shared) fp); }
-    int fputwc_unlocked(wchar_t c, _iobuf* fp)
-    {
-        return fputwc(c, cast(shared) fp);
-    }
-    int fgetc_unlocked(_iobuf* fp) { return fgetc(cast(shared) fp); }
-    int fgetwc_unlocked(_iobuf* fp) { return fgetwc(cast(shared) fp); }
+    wint_t _fgetwc_nolock(_iobuf*);
+    wint_t _fputwc_nolock(wchar_t, _iobuf*);
+    void   _lock_file(FILE*);
+    void   _unlock_file(FILE*);
 
-    alias fputc_unlocked FPUTC;
-    alias fputwc_unlocked FPUTWC;
-    alias fgetc_unlocked FGETC;
-    alias fgetwc_unlocked FGETWC;
+    size_t _fread_nolock (void*        ptr, size_t size, size_t n, _iobuf* stream);
+    size_t _fwrite_nolock(const(void)* ptr, size_t size, size_t n, _iobuf* stream);
 
-    alias flockfile FLOCK;
-    alias funlockfile FUNLOCK;
-}
-else
-{
+    alias  _fgetc_nolock  fgetc_unlocked;
+    alias  _fgetwc_nolock fgetwc_unlocked;
+    alias  _fputc_nolock  fputc_unlocked;
+    alias  _fputwc_nolock fputwc_unlocked;
+    alias  _lock_file     flockfile;
+    alias  _unlock_file   funlockfile;
+
+    alias  _fread_nolock  fread_unlocked;
+    alias  _fwrite_nolock fwrite_unlocked;
+  }
+  else version( GCC_IO )
+  {
+    int    fgetc_unlocked(_iobuf*);
+    wint_t fgetwc_unlocked(_iobuf*);
+    int    fputc_unlocked(int, _iobuf*);
+    wint_t fputwc_unlocked(wchar_t, _iobuf*);
+    void   flockfile(FILE*);
+    void   funlockfile(FILE*);
+
+    size_t fread_unlocked (void*        ptr, size_t size, size_t n, _iobuf* stream);
+    size_t fwrite_unlocked(const(void)* ptr, size_t size, size_t n, _iobuf* stream);
+
+    ptrdiff_t getline  (char** linep, size_t* linecapp, FILE* stream);
+    ptrdiff_t getdelim (char** linep, size_t* linecapp, int delimiter, FILE* stream);
+  }
+  else version( GENERIC_IO )
+  {
+    void   flockfile(FILE*);
+    void   funlockfile(FILE*);
+
+    int    fgetc_unlocked (_iobuf* fp)            { return fgetc(cast(shared) fp);     }
+    wint_t fgetwc_unlocked(_iobuf* fp)            { return fgetwc(cast(shared) fp);    }
+    int    fputc_unlocked (int     c, _iobuf* fp) { return fputc(c, cast(shared) fp);  }
+    wint_t fputwc_unlocked(wchar_t c, _iobuf* fp) { return fputwc(c, cast(shared) fp); }
+  }
+  else
+  {
     static assert(0, "unsupported C I/O system");
+  }
 }
+
+alias fgetc_unlocked  FGETC;
+alias fgetwc_unlocked FGETWC;
+alias fputc_unlocked  FPUTC;
+alias fputwc_unlocked FPUTWC;
+alias flockfile       FLOCK;
+alias funlockfile     FUNLOCK;
 
 //------------------------------------------------------------------------------
 struct ByRecord(Fields...)
@@ -1336,7 +1334,7 @@ $(D Range) that locks the file and allows fast writing to it.
                         assert(isValidDchar(c));
                         if (c <= 0xFFFF)
                         {
-                            FPUTWC(c, handle);
+                            FPUTWC(cast(wchar) c, handle);
                         }
                         else
                         {
@@ -1516,7 +1514,7 @@ void writefx(FILE* fps, TypeInfo[] arguments, void* argptr, int newline=false)
                 assert(isValidDchar(c));
                 if (c <= 0xFFFF)
                 {
-                    FPUTWC(c, fp);
+                    FPUTWC(cast(wchar) c, fp);
                 }
                 else
                 {
@@ -2548,7 +2546,7 @@ private size_t readlnImpl(FILE* fps, ref char[] buf, dchar terminator = '\n')
     }
 }
 
-version (MICROSOFT_STDIO)
+version (MSVCRT)
 private size_t readlnImpl(FILE* fps, ref char[] buf, dchar terminator = '\n')
 {
     FLOCK(fps);

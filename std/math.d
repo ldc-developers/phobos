@@ -61,7 +61,7 @@ version(unittest) {
     import std.typetuple;
 }
 
-version(LDC) {
+version (LDC) {
     import ldc.intrinsics;
 }
 
@@ -383,21 +383,10 @@ unittest
  *      Results are undefined if |x| >= $(POWER 2,64).
  */
 
-version(LDC)
-{
-
-@safe pure nothrow real cos(real x)
-{
-    return llvm_cos(x);
-}
-
-}
+version (LDC)
+    real cos(real x) @safe pure nothrow { return llvm_cos(x); }
 else
-{
-
 real cos(real x) @safe pure nothrow;       /* intrinsic */
-
-}
 
 /***********************************
  * Returns sine of x. x is in radians.
@@ -411,21 +400,10 @@ real cos(real x) @safe pure nothrow;       /* intrinsic */
  * Bugs:
  *      Results are undefined if |x| >= $(POWER 2,64).
  */
-version(LDC)
-{
-
-@safe pure nothrow real sin(real x)
-{
-    return llvm_sin(x);
-}
-
-}
+version (LDC)
+    real sin(real x) @safe pure nothrow { return llvm_sin(x); }
 else
-{
-
 real sin(real x) @safe pure nothrow;       /* intrinsic */
-
-}
 
 
 /***********************************
@@ -492,8 +470,11 @@ unittest{
 
 real tan(real x) @trusted pure nothrow
 {
-    version (LDC)
+    version(LDC)
     {
+      version (Windows)
+        assert(0); // FIXME: core.stdc.math.tanl not available under Windows
+      else
         return core.stdc.math.tanl(x);
     }
     else version(D_InlineAsm_X86)
@@ -1012,21 +993,14 @@ unittest
  * greater than long.max, the result is
  * indeterminate.
  */
-version(LDC)
+version (LDC)
 {
-
-@trusted pure nothrow long rndtol(real x)
-{
-   return core.stdc.math.llroundl(x);
-}
-
+    // FIXME: core.stdc.math.llroundl not available under Windows
+    version (Windows) long rndtol(real x) @trusted pure nothrow { assert(0); }
+    else              long rndtol(real x) @trusted pure nothrow { return core.stdc.math.llroundl(x); }
 }
 else
-{
-
 long rndtol(real x) @safe pure nothrow;    /* intrinsic */
-
-}
 
 
 /*****************************************
@@ -1048,24 +1022,20 @@ extern (C) real rndtonl(real x);
  *      )
  */
 
-version(LDC)
+version (LDC)
 {
-
-@safe pure nothrow
-{
-    float sqrt(float x) { return llvm_sqrt(x); }
-    double sqrt(double x)  { return llvm_sqrt(x); }
-    real sqrt(real x) { return llvm_sqrt(x); }
-}
-
+    @safe pure nothrow
+    {
+        float  sqrt(float x)  { return llvm_sqrt(x); }
+        double sqrt(double x) { return llvm_sqrt(x); }
+        real   sqrt(real x)   { return llvm_sqrt(x); }
+    }
 }
 else
 {
-
 float sqrt(float x) @safe pure nothrow;    /* intrinsic */
 double sqrt(double x) @safe pure nothrow;  /* intrinsic */ /// ditto
 real sqrt(real x) @safe pure nothrow;      /* intrinsic */ /// ditto
-
 }
 
 unittest
@@ -1129,7 +1099,9 @@ creal sqrt(creal z) @safe pure nothrow
  */
 real exp(real x) @trusted pure nothrow
 {
-    version(D_InlineAsm_X86)
+    version(LDC)
+        return llvm_exp(x);
+    else version(D_InlineAsm_X86)
     {
         //  e^^x = 2^^(LOG2E*x)
         // (This is valid because the overflow & underflow limits for exp
@@ -1348,7 +1320,9 @@ L_largenegative:
  */
 real exp2(real x) @trusted pure nothrow
 {
-    version(D_InlineAsm_X86) {
+    version(LDC_LLVM_303)
+        return llvm_exp2(x);
+    else version(D_InlineAsm_X86) {
         enum { PARAMSIZE = (real.sizeof+3)&(0xFFFF_FFFC) } // always a multiple of 4
         asm {
             /*  exp2() for x87 80-bit reals, IEEE754-2008 conformant.
@@ -1894,21 +1868,10 @@ alias core.stdc.math.FP_ILOGBNAN FP_ILOGBNAN;
  * References: frexp
  */
 
-version(LDC)
-{
-
-pure nothrow real ldexp(real n, int exp)
-{
-    return core.stdc.math.ldexpl(n, exp);
-}
-
-}
+version (LDC)
+    real ldexp(real n, int exp) @trusted pure nothrow { return core.stdc.math.ldexpl(n, exp); }
 else
-{
-
 real ldexp(real n, int exp) @safe pure nothrow;    /* intrinsic */
-
-}
 
 unittest {
     assert(ldexp(1, -16384) == 0x1p-16384L);
@@ -1976,7 +1939,9 @@ unittest
 
 real log(real x) @trusted pure nothrow
 {
-    version (INLINE_YL2X)
+    version (LDC)
+        return llvm_log(x);
+    else version (INLINE_YL2X)
         return yl2x(x, LN2);
     else
         return core.stdc.math.logl(x);
@@ -2000,7 +1965,9 @@ unittest
 
 real log10(real x) @trusted pure nothrow
 {
-    version (INLINE_YL2X)
+    version (LDC_LLVM_303)
+        return llvm_log10(x);
+    else version (INLINE_YL2X)
         return yl2x(x, LOG2);
     else
         return core.stdc.math.log10l(x);
@@ -2029,7 +1996,14 @@ unittest
 
 real log1p(real x) @trusted pure nothrow
 {
-    version(INLINE_YL2X)
+    version(LDC)
+    {
+      version(Windows)
+        assert(0); // FIXME: core.stdc.math.log1pl not available under Windows
+      else
+        return core.stdc.math.log1pl(x);
+    }
+    else version(INLINE_YL2X)
     {
         // On x87, yl2xp1 is valid if and only if -0.5 <= lg(x) <= 0.5,
         //    ie if -0.29<=x<=0.414
@@ -2054,7 +2028,14 @@ real log1p(real x) @trusted pure nothrow
  */
 real log2(real x) @trusted pure nothrow
 {
-    version (INLINE_YL2X)
+    version (LDC)
+    {
+        version (LDC_LLVM_303)
+            return llvm_log2(x);
+        else
+            assert(0); // FIXME: core.stdc.math.log2l not available under Windows
+    }
+    else version (INLINE_YL2X)
         return yl2x(x, 1);
     else
         return core.stdc.math.log2l(x);
@@ -2157,7 +2138,9 @@ real modf(real x, ref real i) @trusted nothrow
 real scalbn(real x, int n) @trusted nothrow
 {
     // FIXME: LDC fild not really supported
-    /*version(InlineAsm_X86_Any) {
+    version (LDC)
+        return core.stdc.math.scalbnl(x, n);
+    else version(InlineAsm_X86_Any) {
         // scalbnl is not supported on DMD-Windows, so use asm.
         version (Win64)
         {
@@ -2180,9 +2163,9 @@ real scalbn(real x, int n) @trusted nothrow
                 fstp ST(1);
             }
         }
-    } else {*/
+    } else {
         return core.stdc.math.scalbnl(x, n);
-    /*}*/
+    }
 }
 
 unittest {
@@ -2201,7 +2184,14 @@ unittest {
  */
 real cbrt(real x) @trusted nothrow
 {
-    version (Win64)
+    version (LDC)
+    {
+      version (Windows)
+        assert(0); // FIXME: core.stdc.math.cbrtl not available under Windows
+      else
+        return core.stdc.math.cbrtl(x);
+    }
+    else version (Win64)
     {
         return copysign(exp2(yl2x(fabs(x), 1.0L/3.0L)), x);
     }
@@ -2220,29 +2210,10 @@ real cbrt(real x) @trusted nothrow
  *      )
  */
 
-version(LDC)
-{
-    @trusted pure nothrow real fabs(real x)
-    {
-        version(D_InlineAsm_X86)
-        {
-            asm {
-                fld x;
-                fabs;
-            }
-        }
-        else
-        {
-            return fabsl(x);
-        }
-    }
-}
+version (LDC)
+    real fabs(real x) @safe pure nothrow { return llvm_fabs(x); }
 else
-{
-
 real fabs(real x) @safe pure nothrow;      /* intrinsic */
-
-}
 
 
 /***********************************************************************
@@ -2351,7 +2322,9 @@ unittest
  */
 real ceil(real x)  @trusted nothrow
 {
-    version (Win64)
+    version (LDC_LLVM_303)
+        return llvm_ceil(x);
+    else version (Win64)
     {
         asm
         {
@@ -2386,7 +2359,9 @@ unittest
  */
 real floor(real x) @trusted nothrow
 {
-    version (Win64)
+    version (LDC)
+        return llvm_floor(x);
+    else version (Win64)
     {
         asm
         {
@@ -2424,7 +2399,9 @@ unittest
  */
 real nearbyint(real x) @trusted nothrow
 {
-    version (Win64)
+    version (LDC_LLVM_303)
+        return llvm_nearbyint(x);
+    else version (Win64)
     {
         assert(0);      // not implemented in C library
     }
@@ -2440,37 +2417,17 @@ real nearbyint(real x) @trusted nothrow
  * $(B nearbyint) performs
  * the same operation, but does not set the FE_INEXACT exception.
  */
-version(LDC)
+version (LDC)
 {
-
-    version(LDC_LLVM_303)
-    {
-        @safe pure nothrow real rint(real x)
-        {
-            return llvm_rint(x);
-        }
-    }
-    else
-    {
-        pure nothrow real rint(real x)
-        {
-            asm
-            {
-                fld x;
-                frndint;
-                fstp x;
-            }
-            return x;
-        }
-    }
-
+  version (LDC_LLVM_303)
+    real rint(real x) @safe pure nothrow    { return llvm_rint(x); }
+  else version (Windows) // FIXME: core.stdc.math.rintl not available under Windows
+    real rint(real x) @safe pure nothrow    { assert(0); }
+  else
+    real rint(real x) @trusted pure nothrow { return core.stdc.math.rintl(x); }
 }
 else
-{
-
 real rint(real x) @safe pure nothrow;      /* intrinsic */
-
-}
 
 /***************************************
  * Rounds x to the nearest integer value, using the current rounding
@@ -2485,7 +2442,14 @@ real rint(real x) @safe pure nothrow;      /* intrinsic */
 long lrint(real x) @trusted pure nothrow
 {
     // FIXME: LDC fistp not really supported
-    /*version(InlineAsm_X86_Any)
+    version (LDC)
+    {
+      version (Windows)
+        assert(0); // FIXME: core.stdc.math.llrintl not available under Windows
+      else
+        return core.stdc.math.llrintl(x);
+    }
+    else version(InlineAsm_X86_Any)
     {
         version (Win64)
         {
@@ -2508,9 +2472,9 @@ long lrint(real x) @trusted pure nothrow
             }
             return n;
         }
-    } else {*/
+    } else {
         return core.stdc.math.llrintl(x);
-    /*}*/
+    }
 }
 
 /*******************************************
@@ -2563,7 +2527,9 @@ version(Posix)
  */
 real trunc(real x) @trusted nothrow
 {
-    version (Win64)
+    version (LDC_LLVM_303)
+        return llvm_trunc(x);
+    else version (Win64)
     {
         asm
         {
@@ -4022,7 +3988,9 @@ Unqual!(Largest!(F, G)) pow(F, G)(F x, G y) @trusted pure nothrow
             }
             x = -x;
         }
-        version(INLINE_YL2X) {
+        version(LDC)
+            return sign * llvm_pow(x, y);
+        else version(INLINE_YL2X) {
             // If x > 0, x ^^ y == 2 ^^ ( y * log2(x) )
             // TODO: This is not accurate in practice. A fast and accurate
             // (though complicated) method is described in:
