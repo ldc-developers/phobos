@@ -75,6 +75,8 @@ version (Win64)
     version (D_InlineAsm_X86_64)
         version = Win64_DMD_InlineAsm;
 }
+else
+    version = NoWin64;
 
 import core.stdc.math;
 import std.traits;
@@ -84,7 +86,7 @@ version(LDC)
     import ldc.intrinsics;
     import ldc.llvmasm;
 
-    static if (real.sizeof > double.sizeof)
+    version(NoWin64)
     {
         version(X86)    version = INLINE_YL2X;
         version(X86_64) version = INLINE_YL2X;
@@ -134,12 +136,12 @@ else version(D_InlineAsm_X86_64)
 }
 
 // define InlineAsm*_X87 versions if real is defined as 80-bit x87
-static if (real.sizeof > double.sizeof)
+version(NoWin64)
 {
-    version (D_InlineAsm_X86)     version = InlineAsm_X86_X87;
-    version (D_InlineAsm_X86_64)  version = InlineAsm_X86_64_X87;
-    version (InlineAsm_X86_Any)   version = InlineAsm_X86_Any_X87;
-    version (Win64_DMD_InlineAsm) version = Win64_DMD_InlineAsm_X87;
+    version(D_InlineAsm_X86)     version = InlineAsm_X86_X87;
+    version(D_InlineAsm_X86_64)  version = InlineAsm_X86_64_X87;
+    version(InlineAsm_X86_Any)   version = InlineAsm_X86_Any_X87;
+    version(Win64_DMD_InlineAsm) version = Win64_DMD_InlineAsm_X87;
 }
 
 
