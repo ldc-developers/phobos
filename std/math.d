@@ -2552,17 +2552,12 @@ unittest
  *    $(TR $(TD +$(INFIN))    $(TD +$(INFIN)) $(TD no)           $(TD no))
  *    )
  */
-version(LDC)
-{
-    real log(real x) @safe pure nothrow @nogc { return llvm_log(x); }
-}
-else
-{
-
 real log(real x) @safe pure nothrow @nogc
 {
     version (INLINE_YL2X)
         return yl2x(x, LN2);
+    else version(LDC)
+        return llvm_log(x);
     else
     {
         // Coefficients for log(1 + x)
