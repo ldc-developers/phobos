@@ -33,7 +33,9 @@
 
 #ifdef _MSC_VER
 #  include <io.h>
-#  define vsnprintf _vsnprintf
+#  if _MSC_VER < 1500
+#    define vsnprintf _vsnprintf
+#  endif
 #endif
 
 #ifndef local

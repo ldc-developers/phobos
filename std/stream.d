@@ -1183,7 +1183,7 @@ class Stream : InputStream, OutputStream {
       version (LDC_X86_64)
         throw new Exception("unsupported platform");
       else version (Windows) {
-        count = _vsnprintf(p, psize, f, args);
+        count = vsnprintf(p, psize, f, args);
         if (count != -1)
           break;
         psize *= 2;
