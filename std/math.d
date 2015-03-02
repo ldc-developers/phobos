@@ -1017,11 +1017,18 @@ real atan2(real y, real x) @trusted pure nothrow @nogc
     {
         version (Win64)
         {
-            asm {
+            asm
+            {
                 naked;
-                fld real ptr [RDX]; // y
-                fld real ptr [RCX]; // x
-                fpatan;
+                sub RSP,8;                  // space for one 64 bit value (no redzone allowed on win64)
+                movq [RSP], XMM1;           // move xmm1 into memory
+                fld double ptr [RSP];       // load floating point stack
+                movq [RSP], XMM0;           // move xmm0 into memory
+                fld double ptr [RSP];       // load floating point stack
+                fpatan;                     // calculate the result
+                fst double ptr [RSP];       // move result into memory
+                movq XMM0, [RSP];           // store the result in xmm0
+                add RSP,8;                  // restore stack
                 ret;
             }
         }
@@ -1245,9 +1252,13 @@ public:
 real acosh(real x) @safe pure nothrow @nogc
 {
     if (x > 1/real.epsilon)
+    {
         return LN2 + log(x);
+    }
     else
+    {
         return log(x + sqrt(x*x - 1));
+    }
 }
 
 /// ditto
@@ -1391,9 +1402,11 @@ extern (C) real rndtonl(real x);
  */
 version(LDC)
 {
-    real   sqrt(real   x) @safe pure nothrow @nogc { return llvm_sqrt(x); }
-    double sqrt(double x) @safe pure nothrow @nogc { return llvm_sqrt(x); }
-    float  sqrt(float  x) @safe pure nothrow @nogc { return llvm_sqrt(x); }
+    // http://llvm.org/docs/LangRef.html#llvm-sqrt-intrinsic
+    // sqrt(x) when x is less than zero is undefined
+    real   sqrt(real   x) @safe pure nothrow @nogc { return x<0?NAN:llvm_sqrt(x); }
+    double sqrt(double x) @safe pure nothrow @nogc { return x<0?NAN:llvm_sqrt(x); }
+    float  sqrt(float  x) @safe pure nothrow @nogc { return x<0?NAN:llvm_sqrt(x); }
 }
 else
 {
@@ -1406,6 +1419,11 @@ double sqrt(double x) @nogc @safe pure nothrow;  /* intrinsic */
 /// ditto
 real sqrt(real x) @nogc @safe pure nothrow;      /* intrinsic */
 
+}
+
+unittest
+{
+    assert(isNaN(sqrt(-1.0)));
 }
 
 unittest
