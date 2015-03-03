@@ -94,6 +94,14 @@ version(LDC)
     }
 }
 
+version(LDC)
+{
+    version(Win64)
+    {
+        version = LDC_Win64;
+    }
+}
+
 version(DigitalMars)
 {
     version = INLINE_YL2X;        // x87 has opcodes for these
@@ -2082,9 +2090,9 @@ unittest
     }
 }
 
-version(LDC)
+version(LDC_Win64)
 {
-    pragma(msg, "test disabled on LDC, needs to be reworked since hex floating point constants "
+    pragma(msg, "test disabled on LDC Win64, needs to be reworked since hex floating point constants "
                 "are not recognised. Also, overflow tests won't work since win64 currently treats reals as doubles");
 }
 else
@@ -2516,9 +2524,9 @@ unittest
     }
     else static if (floatTraits!(real).realFormat == RealFormat.ieeeDouble)
     {
-        version(LDC)
+        version(LDC_Win64)
         {
-            pragma(msg,"test disabled on ldc");
+            pragma(msg,"test disabled on ldc until floating point constants and 80 bit reals work");
         }
         else
         {
@@ -6292,9 +6300,9 @@ unittest
 
 
        // Numbers that are close
-       version(LDC)
+       version(LDC_Win64)
        {
-            pragma(msg,"Test disabled on LDC");
+            pragma(msg,"Test disabled on LDC Win64 until floating point constants work");
        }
        else
        {
