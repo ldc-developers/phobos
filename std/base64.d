@@ -637,7 +637,8 @@ template Base64Impl(char Map62th, char Map63th, char Padding = '=')
                 break;
             }
 
-            ++pos %= 4;
+            ++pos;
+            pos %= 4;
         }
 
 
@@ -1316,7 +1317,8 @@ template Base64Impl(char Map62th, char Map63th, char Padding = '=')
                 break;
             }
 
-            ++pos %= 3;
+            ++pos;
+            pos %= 3;
         }
 
 
