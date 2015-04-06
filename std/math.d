@@ -2595,7 +2595,6 @@ int ilogb(real x)  @trusted nothrow @nogc
         int res;
         asm pure nothrow @nogc
         {
-            naked                       ;
             fld     real ptr [x]        ;
             fxam                        ;
             fstsw   AX                  ;
