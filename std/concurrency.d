@@ -1795,6 +1795,8 @@ private
         }
 
         ///
+        version(LDC) { /+ LDC does not support synchronize on an immutable object +/ } else
+        {
         deprecated("isClosed can't be used with a const MessageBox")
         final @property bool isClosed() const
         {
@@ -1802,6 +1804,7 @@ private
             {
                 return m_closed;
             }
+        }
         }
 
         ///
