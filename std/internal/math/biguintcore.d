@@ -37,6 +37,15 @@ version(D_InlineAsm_X86)
 {
     import std.internal.math.biguintx86;
 }
+else version(LDC)
+{
+    version(ARM_Thumb)
+        import std.internal.math.biguintnoasm;
+    else version(ARM)
+        import std.internal.math.biguintarm;
+    else
+        import std.internal.math.biguintnoasm;
+}
 else
 {
     import std.internal.math.biguintnoasm;
