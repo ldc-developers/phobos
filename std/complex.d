@@ -154,19 +154,23 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
 @safe pure nothrow @nogc:
+    import ldc.attributes : fastmath; // all, except ^^
 
+    @fastmath
     this(R : T)(Complex!R z)
     {
         re = z.re;
         im = z.im;
     }
 
+    @fastmath
     this(Rx : T, Ry : T)(Rx x, Ry y)
     {
         re = x;
         im = y;
     }
 
+    @fastmath
     this(R : T)(R r)
     {
         re = r;
@@ -176,6 +180,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     // ASSIGNMENT OPERATORS
 
     // this = complex
+    @fastmath
     ref Complex opAssign(R : T)(Complex!R z)
     {
         re = z.re;
@@ -184,6 +189,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // this = numeric
+    @fastmath
     ref Complex opAssign(R : T)(R r)
     {
         re = r;
@@ -194,12 +200,14 @@ struct Complex(T)  if (isFloatingPoint!T)
     // COMPARISON OPERATORS
 
     // this == complex
+    @fastmath
     bool opEquals(R : T)(Complex!R z) const
     {
         return re == z.re && im == z.im;
     }
 
     // this == numeric
+    @fastmath
     bool opEquals(R : T)(R r) const
     {
         return re == r && im == 0;
@@ -208,6 +216,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     // UNARY OPERATORS
 
     // +complex
+    @fastmath
     Complex opUnary(string op)() const
         if (op == "+")
     {
@@ -215,6 +224,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // -complex
+    @fastmath
     Complex opUnary(string op)() const
         if (op == "-")
     {
@@ -224,6 +234,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     // BINARY OPERATORS
 
     // complex op complex
+    @fastmath
     Complex!(CommonType!(T,R)) opBinary(string op, R)(Complex!R z) const
     {
         alias C = typeof(return);
@@ -232,6 +243,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // complex op numeric
+    @fastmath
     Complex!(CommonType!(T,R)) opBinary(string op, R)(R r) const
         if (isNumeric!R)
     {
@@ -241,6 +253,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // numeric + complex,  numeric * complex
+    @fastmath
     Complex!(CommonType!(T, R)) opBinaryRight(string op, R)(R r) const
         if ((op == "+" || op == "*") && (isNumeric!R))
     {
@@ -248,6 +261,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // numeric - complex
+    @fastmath
     Complex!(CommonType!(T, R)) opBinaryRight(string op, R)(R r) const
         if (op == "-" && isNumeric!R)
     {
@@ -255,6 +269,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // numeric / complex
+    @fastmath
     Complex!(CommonType!(T, R)) opBinaryRight(string op, R)(R r) const
         if (op == "/" && isNumeric!R)
     {
@@ -308,6 +323,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     // OP-ASSIGN OPERATORS
 
     // complex += complex,  complex -= complex
+    @fastmath
     ref Complex opOpAssign(string op, C)(C z)
         if ((op == "+" || op == "-") && is(C R == Complex!R))
     {
@@ -317,6 +333,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // complex *= complex
+    @fastmath
     ref Complex opOpAssign(string op, C)(C z)
         if (op == "*" && is(C R == Complex!R))
     {
@@ -327,6 +344,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // complex /= complex
+    @fastmath
     ref Complex opOpAssign(string op, C)(C z)
         if (op == "/" && is(C R == Complex!R))
     {
@@ -368,6 +386,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // complex += numeric,  complex -= numeric
+    @fastmath
     ref Complex opOpAssign(string op, U : T)(U a)
         if (op == "+" || op == "-")
     {
@@ -376,6 +395,7 @@ struct Complex(T)  if (isFloatingPoint!T)
     }
 
     // complex *= numeric,  complex /= numeric
+    @fastmath
     ref Complex opOpAssign(string op, U : T)(U a)
         if (op == "*" || op == "/")
     {
