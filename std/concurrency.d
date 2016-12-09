@@ -1793,6 +1793,8 @@ private
         }
 
         ///
+        version(LDC) {} else
+        {
         deprecated("isClosed can't be used with a const MessageBox")
         final @property bool isClosed() const
         {
@@ -1800,6 +1802,7 @@ private
             {
                 return m_closed;
             }
+        }
         }
 
         ///
