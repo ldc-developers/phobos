@@ -589,8 +589,8 @@ version(USE_SSSE3)
         {
             /*
              * Parameters:
-             *   RSI contains pointer to state
-             *   RDI contains pointer to input buffer
+             *   RDI (Win64: RCX) contains pointer to state
+             *   RSI (Win64: RDX) contains pointer to input buffer
              *
              * Stack layout as follows:
              * +----------------+
@@ -606,15 +606,30 @@ version(USE_SSSE3)
              * | Wi+Ki          | <- RSP
              * +----------------+ <- 16byte aligned
              */
-            return [// Save registers according to calling convention
-                    "push RBP",
-                    "push RBX",
-                    // Save parameters
-                    "mov "~STATE_PTR~", RSI", //pointer to state
-                    "mov "~BUFFER_PTR~", RDI", //pointer to buffer
-                    // Align stack
-                    "sub RSP, 4*16+8",
-            ];
+            version(Win64)
+            {
+                return [// Save registers according to calling convention
+                        "push RBP",
+                        "push RBX",
+                        // Save parameters
+                        "mov "~STATE_PTR~", RCX", //pointer to state
+                        "mov "~BUFFER_PTR~", RDX", //pointer to buffer
+                        // Align stack
+                        "sub RSP, 4*16+8",
+                ];
+            }
+            else
+            {
+                return [// Save registers according to calling convention
+                        "push RBP",
+                        "push RBX",
+                        // Save parameters
+                        "mov "~STATE_PTR~", RDI", //pointer to state
+                        "mov "~BUFFER_PTR~", RSI", //pointer to buffer
+                        // Align stack
+                        "sub RSP, 4*16+8",
+                ];
+            }
         }
     }
 
