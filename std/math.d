@@ -4307,6 +4307,8 @@ float rint(float x) @safe pure nothrow @nogc { return rint(cast(real)x); }
     assert(print != null);
 }
 
+extern extern(C) int printf(const(char)*fmt, ...) @trusted pure nothrow @nogc;
+
 /***************************************
  * Rounds x to the nearest integer value, using the current rounding
  * mode.
@@ -4358,15 +4360,21 @@ long lrint(real x) @trusted pure nothrow @nogc
             // Find the exponent and sign
             uint msb = vi[MANTISSA_MSB];
             uint lsb = vi[MANTISSA_LSB];
+version(unittest)
+printf(" msb=%08x lsb=%08x\n", msb, lsb);
             int exp = ((msb >> 20) & 0x7ff) - 0x3ff;
             const int sign = msb >> 31;
             msb &= 0xfffff;
             msb |= 0x100000;
+version(unittest)
+printf(" -> sign=%d exp=%d msb=%08x\n", sign, exp, msb);
 
             if (exp < 63)
             {
                 if (exp >= 52)
+                {
                     result = (cast(long) msb << (exp - 20)) | (lsb << (exp - 52));
+                }
                 else
                 {
                     // Adjust x and check result.
@@ -4374,6 +4382,8 @@ long lrint(real x) @trusted pure nothrow @nogc
                     x = (j + x) - j;
                     msb = vi[MANTISSA_MSB];
                     lsb = vi[MANTISSA_LSB];
+version(unittest)
+printf(" adjusted: msb=%08x lsb=%08x\n", msb, lsb);
                     exp = ((msb >> 20) & 0x7ff) - 0x3ff;
                     msb &= 0xfffff;
                     msb |= 0x100000;
@@ -4452,13 +4462,183 @@ long lrint(real x) @trusted pure nothrow @nogc
     }
 }
 
+uint fpucw() nothrow @nogc
+{
+    uint rc;
+    version(D_InlineAsm_X86)
+    {
+        asm nothrow @nogc
+        {
+            fstcw rc;
+        }
+    }
+    return rc;
+}
+
+uint mxcsr() nothrow @nogc
+{
+    uint rc;
+    version(D_InlineAsm_X86)
+    {
+        asm nothrow @nogc
+        {
+            stmxcsr rc;
+        }
+    }
+    return rc;
+}
+
+//import core.cpuid; // this is buggy for x86 so we make a plain copy here
+struct CpuFeatures
+{
+    bool probablyIntel; // true = _probably_ an Intel processor, might be faking
+    bool probablyAMD; // true = _probably_ an AMD processor
+    string processorName;
+    char [12] vendorID;
+    char [48] processorNameBuffer;
+    uint features = 0;     // mmx, sse, sse2, hyperthreading, etc
+    uint miscfeatures = 0; // sse3, etc.
+    uint extfeatures = 0;  // HLE, AVX2, RTM, etc.
+    uint amdfeatures = 0;  // 3DNow!, mmxext, etc
+    uint amdmiscfeatures = 0; // sse4a, sse5, svm, etc
+    ulong xfeatures = 0;   // XFEATURES_ENABLED_MASK
+    uint maxCores = 1;
+    uint maxThreads = 1;
+}
+
+CpuFeatures cpuidX86() nothrow @nogc
+{
+    CpuFeatures cf;
+
+    char * venptr = cf.vendorID.ptr;
+    uint a, b, c, d, a2;
+    version(D_InlineAsm_X86)
+    {
+        asm pure nothrow @nogc {
+            mov EAX, 0;
+            cpuid;
+            mov a, EAX;
+            mov EAX, venptr;
+            mov [EAX], EBX;
+            mov [EAX + 4], EDX;
+            mov [EAX + 8], ECX;
+        }
+    }
+    else version(D_InlineAsm_X86_64)
+    {
+        asm pure nothrow @nogc {
+            mov EAX, 0;
+            cpuid;
+            mov a, EAX;
+            mov RAX, venptr;
+            mov [RAX], EBX;
+            mov [RAX + 4], EDX;
+            mov [RAX + 8], ECX;
+        }
+    }
+    asm pure nothrow @nogc {
+        mov EAX, 0x8000_0000;
+        cpuid;
+        mov a2, EAX;
+    }
+    uint max_cpuid = a;
+    uint max_extended_cpuid = a2;
+
+    uint stepping = a & 0xF;
+    uint fbase = (a >> 8) & 0xF;
+    uint mbase = (a >> 4) & 0xF;
+    uint family = ((fbase == 0xF) || (fbase == 0)) ? fbase + (a >> 20) & 0xFF : fbase;
+    uint model = ((fbase == 0xF) || (fbase == 6 && cf.probablyIntel) ) ?
+        mbase + ((a >> 12) & 0xF0) : mbase;
+
+    if (max_extended_cpuid >= 0x8000_0004) {
+        char *procptr = cf.processorNameBuffer.ptr;
+        version(D_InlineAsm_X86)
+        {
+            asm pure nothrow @nogc {
+                push ESI;
+                mov ESI, procptr;
+                mov EAX, 0x8000_0002;
+                cpuid;
+                mov [ESI], EAX;
+                mov [ESI+4], EBX;
+                mov [ESI+8], ECX;
+                mov [ESI+12], EDX;
+                mov EAX, 0x8000_0003;
+                cpuid;
+                mov [ESI+16], EAX;
+                mov [ESI+20], EBX;
+                mov [ESI+24], ECX;
+                mov [ESI+28], EDX;
+                mov EAX, 0x8000_0004;
+                cpuid;
+                mov [ESI+32], EAX;
+                mov [ESI+36], EBX;
+                mov [ESI+40], ECX;
+                mov [ESI+44], EDX;
+                pop ESI;
+            }
+        }
+        else version(D_InlineAsm_X86_64)
+        {
+            asm pure nothrow @nogc {
+                push RSI;
+                mov RSI, procptr;
+                mov EAX, 0x8000_0002;
+                cpuid;
+                mov [RSI], EAX;
+                mov [RSI+4], EBX;
+                mov [RSI+8], ECX;
+                mov [RSI+12], EDX;
+                mov EAX, 0x8000_0003;
+                cpuid;
+                mov [RSI+16], EAX;
+                mov [RSI+20], EBX;
+                mov [RSI+24], ECX;
+                mov [RSI+28], EDX;
+                mov EAX, 0x8000_0004;
+                cpuid;
+                mov [RSI+32], EAX;
+                mov [RSI+36], EBX;
+                mov [RSI+40], ECX;
+                mov [RSI+44], EDX;
+                pop RSI;
+            }
+        }
+        // Intel P4 and PM pad at front with spaces.
+        // Other CPUs pad at end with nulls.
+        int start = 0, end = 0;
+        while (cf.processorNameBuffer[start] == ' ') { ++start; }
+        while (cf.processorNameBuffer[cf.processorNameBuffer.length-end-1] == 0) { ++end; }
+        cf.processorName = cast(string)(cf.processorNameBuffer[start..$-end]);
+    } else {
+        cf.processorName = "Unknown CPU";
+    }
+
+    return cf;
+}
+
 ///
-@safe pure nothrow @nogc unittest
+/*@safe pure*/ nothrow @nogc unittest
 {
     assert(lrint(4.5) == 4);
     assert(lrint(5.5) == 6);
     assert(lrint(-4.5) == -4);
     assert(lrint(-5.5) == -6);
+
+    // trying to figure out why the x86 build on AppVeyor is failing
+    auto cf = cpuidX86();
+    printf("Vendor %.12s\n", cf.vendorID.ptr);
+    printf("Processor %.48s\n", cf.processorNameBuffer.ptr);
+    printf("FPU CW %x\n", fpucw());
+    printf("SSE CW %x\n", mxcsr());
+
+    printf("lrint(%f) = %lld\n", int.max - 2.5, lrint(int.max - 2.5));
+    printf("lrint(%f) = %lld\n", int.max - 1.5, lrint(int.max - 1.5));
+    printf("lrint(%f) = %lld\n", int.max - 0.5, lrint(int.max - 0.5));
+    printf("lrint(%f) = %lld\n", int.max + 0.5, lrint(int.max + 0.5));
+    printf("lrint(%f) = %lld\n", int.min - 0.5, lrint(int.min - 0.5));
+    printf("lrint(%f) = %lld\n", int.min + 0.5, lrint(int.min + 0.5));
 
     assert(lrint(int.max - 0.5) == 2147483646L);
     assert(lrint(int.max + 0.5) == 2147483648L);
