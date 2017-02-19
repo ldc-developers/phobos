@@ -1792,7 +1792,15 @@ if (is(FloatingPointTypeOf!T) && !is(T == enum) && !hasToString!(T, Char))
         formatTest( to!(    const T)(5.5), "5.5" );
         formatTest( to!(immutable T)(5.5), "5.5" );
 
-        formatTest( T.nan, "nan" );
+        version(Solaris)
+        {
+            // This is the default value for Solaris libc.
+            formatTest(T.nan, "NaN" );
+        }
+        else
+        {
+            formatTest( T.nan, "nan" );
+        }
     }
 }
 
