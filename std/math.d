@@ -653,7 +653,10 @@ auto conj(Num)(Num y) @safe pure nothrow @nogc
 
 version(LDC)
 {
-    real   cos(real   x) @safe pure nothrow @nogc { return llvm_cos(x); }
+    version(InlineAsm_X86_Any_X87)
+        real   cos(real   x) @trusted pure nothrow @nogc { return __asm!real("fcos", "={st},{st}", x); }
+    else
+        real   cos(real   x) @safe pure nothrow @nogc { return llvm_cos(x); }
     ///ditto
     double cos(double x) @safe pure nothrow @nogc { return llvm_cos(x); }
     ///ditto
@@ -699,7 +702,10 @@ float cos(float x) @safe pure nothrow @nogc { return cos(cast(real)x); }
  */
 version(LDC)
 {
-    real   sin(real   x) @safe pure nothrow @nogc { return llvm_sin(x); }
+    version(InlineAsm_X86_Any_X87)
+        real   sin(real   x) @trusted pure nothrow @nogc { return __asm!real("fsin", "={st},{st}", x); }
+    else
+        real   sin(real   x) @safe pure nothrow @nogc { return llvm_sin(x); }
     ///ditto
     double sin(double x) @safe pure nothrow @nogc { return llvm_sin(x); }
     ///ditto
