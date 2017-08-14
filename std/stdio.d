@@ -68,6 +68,12 @@ version (FreeBSD)
     version = HAS_GETDELIM;
 }
 
+version (DragonFlyBSD)
+{
+    version = GENERIC_IO;
+    version = HAS_GETDELIM;
+}
+
 version (Solaris)
 {
     version = GENERIC_IO;
