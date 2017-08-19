@@ -1826,6 +1826,9 @@ version (OSX)
 else version (FreeBSD)
     private extern (C) int sysctl (const int* name, uint namelen, void* oldp,
         size_t* oldlenp, const void* newp, size_t newlen);
+else version (DragonFlyBSD)
+    private extern (C) int sysctl (const int* name, uint namelen, void* oldp,
+        size_t* oldlenp, const void* newp, size_t newlen);
 
 /**
  * Returns the full path of the current executable.
@@ -1875,6 +1878,27 @@ else version (FreeBSD)
         }
     }
     else version (FreeBSD)
+    {
+        enum
+        {
+            CTL_KERN = 1,
+            KERN_PROC = 14,
+            KERN_PROC_PATHNAME = 12
+        }
+
+        int[4] mib = [CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1];
+        size_t len;
+
+        auto result = sysctl(mib.ptr, mib.length, null, &len, null, 0); // get the length of the path
+        errnoEnforce(result == 0);
+
+        auto buffer = new char[len - 1];
+        result = sysctl(mib.ptr, mib.length, buffer.ptr, &len, null, 0);
+        errnoEnforce(result == 0);
+
+        return buffer.assumeUnique;
+    }
+    else version (DragonFlyBSD)
     {
         enum
         {
