@@ -39,13 +39,9 @@ $(BR) $(LINK2 https://en.wikipedia.org/wiki/MurmurHash, Wikipedia)
 module std.digest.murmurhash;
 
 version (X86)
-{
     version = haveUnalignedLoads;
-}
 else version (X86_64)
-{
     version = haveUnalignedLoads;
-}
 
 ///
 @safe unittest
@@ -541,11 +537,29 @@ struct MurmurHash3(uint size /* 32 or 128 */ , uint opt = size_t.sizeof == 8 ? 6
         }
         else
         {
-            void processChunks(TChunk)()
+            void processChunks(T)() @trusted
             {
+                alias TChunk = T[Element.sizeof / T.sizeof];
                 foreach (ref const chunk; cast(const(TChunk[])) data[0 .. remainderStart])
                 {
-                    putElement(cast(Element) chunk);
+                    static if (T.alignof >= Element.alignof)
+                    {
+                        putElement(*cast(const(Element)*) chunk.ptr);
+                    }
+                    else
+                    {
+                        Element[1] alignedCopy = void;
+                        version (LDC)
+                        {
+                            import ldc.intrinsics : llvm_memcpy;
+                            llvm_memcpy(alignedCopy.ptr, chunk.ptr, Element.sizeof, T.alignof);
+                        }
+                        else
+                        {
+                            (cast(T[]) alignedCopy)[] = chunk[];
+                        }
+                        putElement(alignedCopy[0]);
+                    }
                 }
             }
 
@@ -553,29 +567,20 @@ struct MurmurHash3(uint size /* 32 or 128 */ , uint opt = size_t.sizeof == 8 ? 6
             static if (size >= 64)
             {
                 if ((startAddress & 7) == 0)
-                    processChunks!(ulong[size / 64])();
-                else if ((startAddress & 3) == 0)
-                    processChunks!(uint[size / 32])();
-                else if ((startAddress & 1) == 0)
-                    processChunks!(ushort[size / 16])();
-                else
-                    processChunks!(ubyte[size / 8])();
-            }
-            else
-            {
-                static assert(size == 32);
-                if ((startAddress & 3) == 0)
-                    processChunks!(Element)();
-                else
                 {
-                    foreach (ref const chunk; cast(const(ubyte[4])[]) data[0 .. remainderStart])
-                    {
-                        Element[1] block = void;
-                        (cast(ubyte[]) block)[] = chunk[];
-                        putElement(block[0]);
-                    }
+                    processChunks!ulong();
+                    goto L_end;
                 }
             }
+            static assert(size >= 32);
+            if ((startAddress & 3) == 0)
+                processChunks!uint();
+            else if ((startAddress & 1) == 0)
+                processChunks!ushort();
+            else
+                processChunks!ubyte();
+
+L_end:
         }
         element_count += numElements * Element.sizeof;
         data = data[remainderStart .. $];
