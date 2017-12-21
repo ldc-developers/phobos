@@ -1895,6 +1895,10 @@ else version (FreeBSD)
 
         return buffer.assumeUnique;
     }
+    else version (DragonFlyBSD)
+    {
+        return readLink("/proc/curproc/file");
+    }
     else version (Solaris)
     {
         import core.sys.posix.unistd : getpid;

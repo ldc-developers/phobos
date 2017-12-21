@@ -29,14 +29,15 @@ immutable
       +/
     enum OS
     {
-        win32 = 1, /// Microsoft 32 bit Windows systems
-        win64,     /// Microsoft 64 bit Windows systems
-        linux,     /// All Linux Systems
-        osx,       /// Mac OS X
-        freeBSD,   /// FreeBSD
-        solaris,   /// Solaris
-        android,   /// Android
-        otherPosix /// Other Posix Systems
+        win32 = 1,    /// Microsoft 32 bit Windows systems
+        win64,        /// Microsoft 64 bit Windows systems
+        linux,        /// All Linux Systems
+        osx,          /// Mac OS X
+        freeBSD,      /// FreeBSD
+        dragonFlyBSD, /// DragonFlyBSD
+        solaris,      /// Solaris
+        android,      /// Android
+        otherPosix    /// Other Posix Systems
     }
 
     /// The OS that the program was compiled for.
@@ -46,6 +47,7 @@ immutable
     else version(linux)   OS os = OS.linux;
     else version(OSX)     OS os = OS.osx;
     else version(FreeBSD) OS os = OS.freeBSD;
+    else version(DragonFlyBSD) OS os = OS.dragonFlyBSD;
     else version(Posix)   OS os = OS.otherPosix;
     else static assert(0, "Unknown OS.");
 

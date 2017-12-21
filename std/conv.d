@@ -510,7 +510,9 @@ T toImpl(T, S)(S value)
             T opCast(U)() @safe pure { assert(false); }
         }
     }
-    to!(Test.T)(Test.S());
+    // CHECKME: std/conv.d(513): Warning: calling std.conv.to!(T).to!(S).to without side effects discards return value of type T, prepend a cast(void) if intentional
+    // to!(Test.T)(Test.S());
+    cast(void) to!(Test.T)(Test.S());
 
     // make sure std.conv.to is doing the same thing as initialization
     Test.S s;

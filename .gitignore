@@ -1,5 +1,7 @@
 /etc/c/zlib/*.obj
+/etc/c/zlib/*.o
 /etc/c/zlib/zlib.lib
+/etc/c/zlib/zlib.a
 /phobos.json
 /phobos.lib
 
@@ -14,3 +16,4 @@ Makefile
 bin/
 obj/
 *.html
+
