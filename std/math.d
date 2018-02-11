@@ -1701,6 +1701,33 @@ real exp(real x) @trusted pure nothrow @nogc
             enum real OF =  1.1356523406294143949492E4L;  // ln((1-2^-64) * 2^16384)
             enum real UF = -1.13994985314888605586758E4L; // ln(2^-16446)
         }
+        else static if (F.realFormat == RealFormat.ieeeQuadruple)
+        {
+            // Coefficients for exp(x) - 1
+            static immutable real[5] P = [
+                9.999999999999999999999999999999999998502E-1L,
+                3.508710990737834361215404761139478627390E-2L,
+                2.708775201978218837374512615596512792224E-4L,
+                6.141506007208645008909088812338454698548E-7L,
+                3.279723985560247033712687707263393506266E-10L
+            ];
+            static immutable real[6] Q = [
+                2.000000000000000000000000000000000000150E0,
+                2.368408864814233538909747618894558968880E-1L,
+                3.611828913847589925056132680618007270344E-3L,
+                1.504792651814944826817779302637284053660E-5L,
+                1.771372078166251484503904874657985291164E-8L,
+                2.980756652081995192255342779918052538681E-12L
+            ];
+
+            // C1 + C2 = LN2.
+            enum real C1 = 6.93145751953125E-1L;
+            enum real C2 = 1.428606820309417232121458176568075500134E-6L;
+
+            // Overflow and Underflow limits.
+            enum real OF =  1.135583025911358400418251384584930671458833e4L;
+            enum real UF = -1.143276959615573793352782661133116431383730e4L;
+        }
         else
             static assert(0, "Not implemented for this architecture");
 
@@ -4302,6 +4329,42 @@ long lrint(real x) @trusted pure nothrow @nogc
                 // to fit in a 64bit long.
                 return cast(long) x;
             }
+
+            return sign ? -result : result;
+        }
+        else static if (F.realFormat == RealFormat.ieeeQuadruple)
+        {
+            const vu = cast(ushort*)(&x);
+
+            // Find the exponent and sign
+            const sign = (vu[F.EXPPOS_SHORT] >> 15) & 1;
+            if ((vu[F.EXPPOS_SHORT] & F.EXPMASK) - (F.EXPBIAS + 1) > 63)
+            {
+                // The result is left implementation defined when the number is
+                // too large to fit in a 64 bit long.
+                return cast(long) x;
+            }
+
+            // Force rounding of lower bits according to current rounding
+            // mode by adding ±2^-112 and subtracting it again.
+            enum OF = 5.19229685853482762853049632922009600E33L;
+            const j = sign ? -OF : OF;
+            x = (j + x) - j;
+
+            const implicitOne = 1UL << 48;
+            auto vl = cast(ulong*)(&x);
+            vl[MANTISSA_MSB] &= implicitOne - 1;
+            vl[MANTISSA_MSB] |= implicitOne;
+
+            long result;
+
+            const exp = (vu[F.EXPPOS_SHORT] & F.EXPMASK) - (F.EXPBIAS + 1);
+            if (exp < 0)
+                result = 0;
+            else if (exp <= 48)
+                result = vl[MANTISSA_MSB] >> (48 - exp);
+            else
+                result = (vl[MANTISSA_MSB] << (exp - 48)) | (vl[MANTISSA_LSB] >> (112 - exp));
 
             return sign ? -result : result;
         }
