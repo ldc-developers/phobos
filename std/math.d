@@ -7119,6 +7119,7 @@ Unqual!(Largest!(F, G)) pow(F, G)(F x, G y) @nogc @trusted pure nothrow
     assert(isNaN(pow(-0.2, PI)));
     // boundary cases. Note that epsilon == 2^^-n for some n,
     // so 1/epsilon == 2^^n is always even.
+    version(DragonFlyBSD) {} else                // exclude next test on DragonFlyBSD
     assert(pow(-1.0L, 1/real.epsilon - 1.0L) == -1.0L);
     assert(pow(-1.0L, 1/real.epsilon) == 1.0L);
     assert(isNaN(pow(-1.0L, 1/real.epsilon-0.5L)));
