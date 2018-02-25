@@ -233,6 +233,15 @@ struct AlignedMallocator
         assert(a.isGoodDynamicAlignment);
         void* result;
         auto code = posix_memalign(&result, a, bytes);
+
+version(OSX)
+version(LDC_AddressSanitizer)
+{
+        // The returnvalue with AddressSanitizer may be -1 (invalid)
+        // See https://bugs.llvm.org/show_bug.cgi?id=36510
+        if (code == -1)
+            return null;
+}
         if (code == ENOMEM)
             return null;
 
