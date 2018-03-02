@@ -237,8 +237,8 @@ struct AlignedMallocator
 version(OSX)
 version(LDC_AddressSanitizer)
 {
-        // The returnvalue with AddressSanitizer may be -1 (invalid)
-        // See https://bugs.llvm.org/show_bug.cgi?id=36510
+        // The return value with AddressSanitizer may be -1 instead of ENOMEM
+        // or EINVAL. See https://bugs.llvm.org/show_bug.cgi?id=36510
         if (code == -1)
             return null;
 }
