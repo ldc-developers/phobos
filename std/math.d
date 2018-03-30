@@ -159,12 +159,12 @@ version(DigitalMars)
     version = INLINE_YL2X;        // x87 has opcodes for these
 }
 
-version (X86)    version = X86_Any;
-version (X86_64) version = X86_Any;
-version (PPC)    version = PPC_Any;
-version (PPC64)  version = PPC_Any;
-version (MIPS)   version = MIPS_Any;
-version (MIPS64) version = MIPS_Any;
+version (X86)       version = X86_Any;
+version (X86_64)    version = X86_Any;
+version (PPC)       version = PPC_Any;
+version (PPC64)     version = PPC_Any;
+version (MIPS32)    version = MIPS_Any;
+version (MIPS64)    version = MIPS_Any;
 
 version(D_InlineAsm_X86)
 {
@@ -4949,7 +4949,7 @@ private:
             }
             else version (MIPS_Any)
             {
-                return __asm!uint("cfc1 $0, $$31", "=r");
+                return __asm!uint(".set noat; cfc1 $0, $$31; .set at", "=r");
             }
             else version (ARM_SoftFloat)
             {
@@ -5035,9 +5035,14 @@ private:
             }
             else version (MIPS_Any)
             {
-                cast(void) __asm!uint("cfc1 $0, $$31\n" ~
-                                      "andi $0, $0, 0xFFFFFF80\n" ~
-                                      "ctc1 $0, $$31", "=r");
+                version (D_LP64)    enum mask = "0xFFFFFF80";
+                else                enum mask = "0xFF80";
+
+                cast(void) __asm!uint(`.set noat
+                                       cfc1 $0, $$31
+                                       andi $0, $0, `~ mask ~`
+                                       ctc1 $0, $$31
+                                       .set at`, "=r");
             }
             else version (AArch64)
             {
@@ -5562,9 +5567,14 @@ private:
             }
             else version (MIPS_Any)
             {
-                cast(void) __asm!uint("cfc1 $0, $$31\n" ~
-                                      "andi $0, $0, 0xFFFFF07F\n" ~
-                                      "ctc1 $0, $$31", "=r");
+                version (D_LP64)    enum mask = "0xFFFFF07F";
+                else                enum mask = "0xF07F";
+
+                cast(void) __asm!uint(`.set noat
+                                       cfc1 $0, $$31
+                                       andi $0, $0, `~ mask ~`
+                                       ctc1 $0, $$31
+                                       .set at`, "=r");
             }
             else version (AArch64)
             {
@@ -5615,7 +5625,7 @@ private:
             }
             else version (MIPS_Any)
             {
-                cont = __asm!uint("cfc1 $0, $$31", "=r");
+                cont = __asm!uint(".set noat; cfc1 $0, $$31; .set at", "=r");
             }
             else version (AArch64)
             {
@@ -5721,7 +5731,7 @@ private:
             }
             else version (MIPS_Any)
             {
-                __asm("ctc1 $0, $$31", "r", newState);
+                __asm(".set noat; ctc1 $0, $$31; .set at", "r", newState);
             }
             else version (AArch64)
             {
