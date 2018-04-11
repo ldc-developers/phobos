@@ -4947,6 +4947,10 @@ private:
                 double fspr = __asm!double("mffs $0", "=f");
                 return cast(uint) *cast(ulong*) &fspr;
             }
+            else version (MIPS_SoftFloat)
+            {
+                return 0;
+            }
             else version (MIPS_Any)
             {
                 return __asm!uint(".set noat; cfc1 $0, $$31; .set at", "=r");
@@ -5032,6 +5036,9 @@ private:
                       "mtfsb0 10\n" ~
                       "mtfsb0 11\n" ~
                       "mtfsb0 12", "");
+            }
+            else version (MIPS_SoftFloat)
+            {
             }
             else version (MIPS_Any)
             {
@@ -5565,6 +5572,9 @@ private:
                       "mtfsb0 27\n" ~
                       "mtfsb0 28", "");
             }
+            else version (MIPS_SoftFloat)
+            {
+            }
             else version (MIPS_Any)
             {
                 version (D_LP64)    enum mask = "0xFFFFF07F";
@@ -5622,6 +5632,10 @@ private:
             {
                 double fspr = __asm!double("mffs $0", "={f0}");
                 cont = cast(ControlState) *cast(ulong*) &fspr;
+            }
+            else version (MIPS_SoftFloat)
+            {
+                cont = 0;
             }
             else version (MIPS_Any)
             {
@@ -5728,6 +5742,9 @@ private:
                 ulong tmpState = newState;
                 double fspr = *cast(double*) &tmpState;
                 __asm("mtfsf 0x0f, $0", "f", fspr);
+            }
+            else version (MIPS_SoftFloat)
+            {
             }
             else version (MIPS_Any)
             {
