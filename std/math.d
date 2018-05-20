@@ -5904,9 +5904,9 @@ public:
             auto oldState = getControlState();
             // If exceptions are not supported, we set the bit but read it back as zero
             // https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/aarch64/fpu/feenablxcpth.c
-            setControlState(oldState | (divByZeroException & allExceptions));
+            __asm_trusted("msr FPCR, $0", "r", oldState | divByZeroException);
             immutable result = (getControlState() & allExceptions) != 0;
-            setControlState(oldState);
+            __asm_trusted("msr FPCR, $0", "r", oldState);
             return result;
         }
         else version(ARM)
@@ -5914,9 +5914,9 @@ public:
             auto oldState = getControlState();
             // If exceptions are not supported, we set the bit but read it back as zero
             // https://sourceware.org/ml/libc-ports/2012-06/msg00091.html
-            setControlState(oldState | (divByZeroException & allExceptions));
+            __asm_trusted("vmsr FPSCR, $0", "r", oldState | divByZeroException);
             immutable result = (getControlState() & allExceptions) != 0;
-            setControlState(oldState);
+            __asm_trusted("vmsr FPSCR, $0", "r", oldState);
             return result;
         }
         else
@@ -6011,11 +6011,11 @@ private:
             }
             else version (PPC_Any)
             {
-                __asm("mtfsb0 24\n" ~
-                      "mtfsb0 25\n" ~
-                      "mtfsb0 26\n" ~
-                      "mtfsb0 27\n" ~
-                      "mtfsb0 28", "");
+                __asm_trusted("mtfsb0 24\n" ~
+                              "mtfsb0 25\n" ~
+                              "mtfsb0 26\n" ~
+                              "mtfsb0 27\n" ~
+                              "mtfsb0 28", "");
             }
             else version (MIPS_SoftFloat)
             {
@@ -6025,18 +6025,18 @@ private:
                 version (D_LP64)    enum mask = "0xFFFFF07F";
                 else                enum mask = "0xF07F";
 
-                cast(void) __asm!uint(`.set noat
-                                       cfc1 $0, $$31
-                                       andi $0, $0, `~ mask ~`
-                                       ctc1 $0, $$31
-                                       .set at`, "=r");
+                cast(void) __asm_trusted!uint(`.set noat
+                                               cfc1 $0, $$31
+                                               andi $0, $0, `~ mask ~`
+                                               ctc1 $0, $$31
+                                               .set at`, "=r");
             }
             else version (AArch64)
             {
                 // http://infocenter.arm.com/help/topic/com.arm.doc.ddi0502f/CIHHDCHB.html
-                cast(void) __asm!uint("mrs $0, fpsr\n" ~
-                                      "and $0, $0, #~0x1f\n" ~
-                                      "msr fpsr, $0", "=r");
+                cast(void) __asm_trusted!uint("mrs $0, fpsr\n" ~
+                                              "and $0, $0, #~0x1f\n" ~
+                                              "msr fpsr, $0", "=r");
             }
             else version (ARM_SoftFloat)
             {
@@ -6045,7 +6045,7 @@ private:
             {
                 ControlState old = getControlState();
                 old &= ~0b11111; // http://infocenter.arm.com/help/topic/com.arm.doc.ddi0408i/Chdfifdc.html
-                __asm("vmsr FPSCR, $0", "r", old);
+                __asm_trusted("vmsr FPSCR, $0", "r", old);
             }
             else
                 assert(0, "Not yet supported");
