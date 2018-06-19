@@ -4242,11 +4242,7 @@ real cbrt(real x) @trusted nothrow @nogc
  */
 version(LDC)
 {
-    real   fabs(real   x) @safe pure nothrow @nogc { return llvm_fabs(x); }
-    ///ditto
-    double fabs(double x) @safe pure nothrow @nogc { return llvm_fabs(x); }
-    ///ditto
-    float  fabs(float  x) @safe pure nothrow @nogc { return llvm_fabs(x); }
+    alias fabs = llvm_fabs;
 }
 else
 {
