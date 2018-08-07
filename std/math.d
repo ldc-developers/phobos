@@ -4316,6 +4316,13 @@ real hypot(real x, real y) @safe pure nothrow @nogc
 
     static assert(2*(SQRTMAX/2)*(SQRTMAX/2) <= real.max);
 
+    version(AArch64)
+    {
+        // This static assert overflows when cross-compiling from lower-precision
+        // floating-point to Quadruple.
+        pragma(msg, "hypot static assert disabled for AArch64 cross-compilation");
+    }
+    else
     // Proves that sqrt(real.max) ~~  0.5/sqrt(real.min_normal)
     static assert(real.min_normal*real.max > 2 && real.min_normal*real.max <= 4);
 
