@@ -6596,7 +6596,7 @@ nothrow @nogc:
     else
         static assert(false, "Not implemented for this architecture");
 
-    version (ARM_Any)
+    version (ARM_HardFloat)
     {
         static bool hasExceptionTraps_impl() @safe
         {
@@ -6632,7 +6632,7 @@ public:
             return true;
         else version (MIPS_Any)
             return true;
-        else version (ARM_Any)
+        else version (ARM_HardFloat)
         {
             // The hasExceptionTraps_impl function is basically pure,
             // as it restores all global state
@@ -6640,6 +6640,8 @@ public:
                 pure nothrow @nogc)&hasExceptionTraps_impl)();
             return fptr();
         }
+        else version (ARM_SoftFloat)
+            return false;
         else
             assert(0, "Not yet supported");
     }
