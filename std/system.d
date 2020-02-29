@@ -36,6 +36,7 @@ immutable
         dragonFlyBSD, /// DragonFlyBSD
         solaris,   /// Solaris
         android,   /// Android
+        wasm32,    /// WebAssembly
         otherPosix /// Other Posix Systems
     }
 
@@ -49,6 +50,7 @@ immutable
     else version (NetBSD)  OS os = OS.netBSD;
     else version (DragonFlyBSD) OS os = OS.dragonFlyBSD;
     else version (Posix)   OS os = OS.otherPosix;
+    else version (WebAssembly) OS os = OS.wasm32;
     else static assert(0, "Unknown OS.");
 
     /++
@@ -74,4 +76,3 @@ immutable
     version (LittleEndian) Endian endian = Endian.littleEndian;
     else                  Endian endian = Endian.bigEndian;
 }
-

@@ -92,6 +92,8 @@ import std.range.primitives;
 import std.traits;
 import std.typecons;
 
+version (WebAssembly) version = WASI_libc; // Always use the WASI libc for translating libc calls to wasi, see https://github.com/CraneStation/wasi-libc
+
 version (Windows)
 {
     import core.sys.windows.winbase, core.sys.windows.winnt, std.windows.syserror;
@@ -101,6 +103,9 @@ else version (Posix)
     import core.sys.posix.dirent, core.sys.posix.fcntl, core.sys.posix.sys.stat,
         core.sys.posix.sys.time, core.sys.posix.unistd, core.sys.posix.utime;
 }
+ else version (WASI_libc) {
+     import core.sys.wasi.dirent, core.sys.wasi.fcntl, core.sys.wasi.unistd;
+     }
 else
     static assert(false, "Module " ~ .stringof ~ " not implemented for this OS.");
 
@@ -113,6 +118,10 @@ else version (Posix)
 {
     private alias FSChar = char;
 }
+ else version (WASI_libc)
+   {
+     private alias FSChar = char;
+   }
 else
     static assert(0);
 
@@ -121,7 +130,10 @@ else
 {
     import std.conv : text;
     import std.path : buildPath;
-    import std.process : thisProcessID;
+    version (WebAssembly)
+        enum thisProcessID = "wasm";
+    else
+        import std.process : thisProcessID;
 
     enum base = "deleteme.dmd.unittest.pid";
     static string fileName;
@@ -214,6 +226,14 @@ class FileException : Exception
         import std.exception : errnoString;
         this(name, errnoString(errno), file, line, errno);
     }
+    else version (WebAssembly) this(scope const(char)[] name,
+                              uint errno = .errno,
+                              string file = __FILE__,
+                              size_t line = __LINE__) @trusted
+        {
+            import std.exception : errnoString;
+            this(name, errnoString(errno), file, line, errno);
+        }
 }
 
 ///
@@ -236,6 +256,10 @@ private T cenforce(T)(T condition, lazy scope const(char)[] name, string file = 
     {
         throw new FileException(name, .errno, file, line);
     }
+    else version (WebAssembly)
+        {
+            throw new FileException(name, .errno, file, line);
+        }
 }
 
 version (Windows)
@@ -270,6 +294,23 @@ private T cenforce(T)(T condition, scope const(char)[] name, scope const(FSChar)
         auto len = namez ? strlen(namez) : 0;
         name = namez[0 .. len].idup;
     }
+    throw new FileException(name, .errno, file, line);
+}
+
+version (WebAssembly)
+@trusted
+private T cenforce(T)(T condition, scope const(char)[] name, scope const(FSChar)* namez,
+                      string file = __FILE__, size_t line = __LINE__)
+{
+    if (condition)
+        return condition;
+    if (!name)
+        {
+            import core.stdc.string : strlen;
+
+            auto len = namez ? strlen(namez) : 0;
+            name = namez[0 .. len].idup;
+        }
     throw new FileException(name, .errno, file, line);
 }
 
@@ -1199,6 +1240,28 @@ private SysTime statTimeToStdTime(char which)(ref const stat_t statbuf)
     return SysTime(stdTime);
 }
 
+// Reads a time field from a stat_t with full precision.
+version (WebAssembly)
+private SysTime statTimeToStdTime(char which)(ref const stat_t statbuf)
+{
+    auto unixTime = mixin(`statbuf.st_` ~ which ~ `time`);
+    long stdTime = unixTimeToStdTime(unixTime);
+
+    static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `tim`))))
+        stdTime += mixin(`statbuf.st_` ~ which ~ `tim.tv_nsec`) / 100;
+    else
+        static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `timensec`))))
+            stdTime += mixin(`statbuf.st_` ~ which ~ `timensec`) / 100;
+        else
+            static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `time_nsec`))))
+                stdTime += mixin(`statbuf.st_` ~ which ~ `time_nsec`) / 100;
+            else
+                static if (is(typeof(mixin(`statbuf.__st_` ~ which ~ `timensec`))))
+                    stdTime += mixin(`statbuf.__st_` ~ which ~ `timensec`) / 100;
+
+    return SysTime(stdTime);
+}
+
 /++
     Get the access and modified times of file or folder `name`.
 
@@ -1952,6 +2015,31 @@ private bool existsImpl(const(FSChar)* namez) @trusted nothrow @nogc
         stat_t statbuf = void;
         return lstat(namez, &statbuf) == 0;
     }
+    else version (WASI_libc)
+    {
+        /*
+            The reason why we use stat (and not access) here is
+            the quirky behavior of access for SUID programs: if
+            we used access, a file may not appear to "exist",
+            despite that the program would be able to open it
+            just fine. The behavior in question is described as
+            follows in the access man page:
+
+            > The check is done using the calling process's real
+            > UID and GID, rather than the effective IDs as is
+            > done when actually attempting an operation (e.g.,
+            > open(2)) on the file. This allows set-user-ID
+            > programs to easily determine the invoking user's
+            > authority.
+
+            While various operating systems provide eaccess or
+            euidaccess functions, these are not part of POSIX -
+            so it's safer to use stat instead.
+        */
+
+        stat_t statbuf = void;
+        return lstat(namez, &statbuf) == 0;
+    }
     else
         static assert(0);
 }
@@ -2031,7 +2119,24 @@ if (isInputRange!R && !isInfinite!R && isSomeChar!(ElementEncodingType!R) &&
 
         return statbuf.st_mode;
     }
-}
+    else version (WebAssembly)
+    {
+        auto namez = name.tempCString!FSChar();
+        static auto trustedStat(const(FSChar)* namez, ref stat_t buf) @trusted
+        {
+            return stat(namez, &buf);
+        }
+        stat_t statbuf = void;
+
+        static if (isNarrowString!R && is(Unqual!(ElementEncodingType!R) == char))
+            alias names = name;
+        else
+            string names = null;
+        cast(void)cenforce(trustedStat(namez, statbuf) == 0, names, namez);
+
+        return statbuf.st_mode;
+    }
+ }
 
 /// ditto
 uint getAttributes(R)(auto ref R name)
@@ -2324,6 +2429,10 @@ if (isInputRange!R && !isInfinite!R && isSomeChar!(ElementEncodingType!R) &&
     {
         return (getAttributes(name) & S_IFMT) == S_IFDIR;
     }
+    else version (WebAssembly)
+        {
+            return (getAttributes(name) & S_IFMT) == S_IFDIR;
+        }
 }
 
 /// ditto
@@ -2412,6 +2521,10 @@ bool attrIsDir(uint attributes) @safe pure nothrow @nogc
     {
         return (attributes & S_IFMT) == S_IFDIR;
     }
+    else version (WebAssembly)
+        {
+            return (attributes & S_IFMT) == S_IFDIR;
+        }
 }
 
 ///
@@ -2499,6 +2612,8 @@ if (isInputRange!R && !isInfinite!R && isSomeChar!(ElementEncodingType!R) &&
     version (Windows)
         return !name.isDir;
     else version (Posix)
+        return (getAttributes(name) & S_IFMT) == S_IFREG;
+    else version (WebAssembly)
         return (getAttributes(name) & S_IFMT) == S_IFREG;
 }
 
@@ -2596,6 +2711,10 @@ bool attrIsFile(uint attributes) @safe pure nothrow @nogc
     {
         return (attributes & S_IFMT) == S_IFREG;
     }
+    else version (WebAssembly)
+        {
+            return (attributes & S_IFMT) == S_IFREG;
+        }
 }
 
 ///
@@ -2812,6 +2931,8 @@ bool attrIsSymlink(uint attributes) @safe pure nothrow @nogc
     version (Windows)
         return (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
     else version (Posix)
+        return (attributes & S_IFMT) == S_IFLNK;
+    else version (WebAssembly)
         return (attributes & S_IFMT) == S_IFLNK;
 }
 
@@ -3142,6 +3263,13 @@ if (isInputRange!R && !isInfinite!R && isSomeChar!(ElementEncodingType!R) &&
             return core.sys.posix.unistd.rmdir(pathz) == 0;
         }
     }
+    else version (WebAssembly)
+        {
+            static auto trustedRmdir(const(FSChar)* pathz) @trusted
+            {
+                return core.sys.wasi.unistd.rmdir(pathz) == 0;
+            }
+        }
     static if (isNarrowString!R && is(Unqual!(ElementEncodingType!R) == char))
         alias pathStr = pathname;
     else
@@ -3426,6 +3554,13 @@ else version (Posix) string getcwd() @trusted
     scope(exit) core.stdc.stdlib.free(p);
     return p[0 .. core.stdc.string.strlen(p)].idup;
 }
+ else version (WASI_libc) string getcwd() @trusted
+     {
+         auto p = cenforce(core.sys.wasi.unistd.getcwd(null, 0),
+                           "cannot get cwd");
+         scope(exit) core.stdc.stdlib.free(p);
+         return p[0 .. core.stdc.string.strlen(p)].idup;
+     }
 
 ///
 @safe unittest
@@ -3535,6 +3670,9 @@ else version (NetBSD)
 
         // Only Solaris 10 and later
         return readLink(format("/proc/%d/path/a.out", getpid()));
+    }
+    else version (WebAssembly) {
+        assert(0, "Unsupported");
     }
     else
         static assert(0, "thisExePath is not supported on this platform");
@@ -3852,6 +3990,214 @@ else version (Posix)
         }
 
         private this(string path, core.sys.posix.dirent.dirent* fd) @safe
+        {
+            import std.path : buildPath;
+
+            static if (is(typeof(fd.d_namlen)))
+                immutable len = fd.d_namlen;
+            else
+                immutable len = (() @trusted => core.stdc.string.strlen(fd.d_name.ptr))();
+
+            _name = buildPath(path, (() @trusted => fd.d_name.ptr[0 .. len])());
+
+            _didLStat = false;
+            _didStat = false;
+
+            //fd_d_type doesn't work for all file systems,
+            //in which case the result is DT_UNKOWN. But we
+            //can determine the correct type from lstat, so
+            //we'll only set the dtype here if we could
+            //correctly determine it (not lstat in the case
+            //of DT_UNKNOWN in case we don't ever actually
+            //need the dtype, thus potentially avoiding the
+            //cost of calling lstat).
+            static if (__traits(compiles, fd.d_type != DT_UNKNOWN))
+            {
+                if (fd.d_type != DT_UNKNOWN)
+                {
+                    _dType = fd.d_type;
+                    _dTypeSet = true;
+                }
+                else
+                    _dTypeSet = false;
+            }
+            else
+            {
+                // e.g. Solaris does not have the d_type member
+                _dTypeSet = false;
+            }
+        }
+
+        @property string name() const pure nothrow
+        {
+            return _name;
+        }
+
+        @property bool isDir()
+        {
+            _ensureStatOrLStatDone();
+
+            return (_statBuf.st_mode & S_IFMT) == S_IFDIR;
+        }
+
+        @property bool isFile()
+        {
+            _ensureStatOrLStatDone();
+
+            return (_statBuf.st_mode & S_IFMT) == S_IFREG;
+        }
+
+        @property bool isSymlink()
+        {
+            _ensureLStatDone();
+
+            return (_lstatMode & S_IFMT) == S_IFLNK;
+        }
+
+        @property ulong size()
+        {
+            _ensureStatDone();
+            return _statBuf.st_size;
+        }
+
+        @property SysTime timeStatusChanged()
+        {
+            _ensureStatDone();
+
+            return statTimeToStdTime!'c'(_statBuf);
+        }
+
+        @property SysTime timeLastAccessed()
+        {
+            _ensureStatDone();
+
+            return statTimeToStdTime!'a'(_statBuf);
+        }
+
+        @property SysTime timeLastModified()
+        {
+            _ensureStatDone();
+
+            return statTimeToStdTime!'m'(_statBuf);
+        }
+
+        @property uint attributes()
+        {
+            _ensureStatDone();
+
+            return _statBuf.st_mode;
+        }
+
+        @property uint linkAttributes()
+        {
+            _ensureLStatDone();
+
+            return _lstatMode;
+        }
+
+        @property stat_t statBuf()
+        {
+            _ensureStatDone();
+
+            return _statBuf;
+        }
+
+    private:
+        /++
+            This is to support lazy evaluation, because doing stat's is
+            expensive and not always needed.
+         +/
+        void _ensureStatDone() @trusted
+        {
+            import std.exception : enforce;
+
+            if (_didStat)
+                return;
+
+            enforce(stat(_name.tempCString(), &_statBuf) == 0,
+                    "Failed to stat file `" ~ _name ~ "'");
+
+            _didStat = true;
+        }
+
+        /++
+            This is to support lazy evaluation, because doing stat's is
+            expensive and not always needed.
+
+            Try both stat and lstat for isFile and isDir
+            to detect broken symlinks.
+         +/
+        void _ensureStatOrLStatDone() @trusted
+        {
+            if (_didStat)
+                return;
+
+            if (stat(_name.tempCString(), &_statBuf) != 0)
+            {
+                _ensureLStatDone();
+
+                _statBuf = stat_t.init;
+                _statBuf.st_mode = S_IFLNK;
+            }
+            else
+            {
+                _didStat = true;
+            }
+        }
+
+        /++
+            This is to support lazy evaluation, because doing stat's is
+            expensive and not always needed.
+         +/
+        void _ensureLStatDone() @trusted
+        {
+            import std.exception : enforce;
+
+            if (_didLStat)
+                return;
+
+            stat_t statbuf = void;
+            enforce(lstat(_name.tempCString(), &statbuf) == 0,
+                "Failed to stat file `" ~ _name ~ "'");
+
+            _lstatMode = statbuf.st_mode;
+
+            _dTypeSet = true;
+            _didLStat = true;
+        }
+
+        string _name; /// The file or directory represented by this DirEntry.
+
+        stat_t _statBuf = void;   /// The result of stat().
+        uint  _lstatMode;         /// The stat mode from lstat().
+        ubyte _dType;             /// The type of the file.
+
+        bool _didLStat = false;   /// Whether lstat() has been called for this DirEntry.
+        bool _didStat = false;    /// Whether stat() has been called for this DirEntry.
+        bool _dTypeSet = false;   /// Whether the dType of the file has been set.
+    }
+}
+else version (WASI_libc)
+{
+    struct DirEntry
+    {
+    @safe:
+    public:
+        alias name this;
+
+        this(string path)
+        {
+            if (!path.exists)
+                throw new FileException(path, "File does not exist");
+
+            _name = path;
+
+            _didLStat = false;
+            _didStat = false;
+            _dTypeSet = false;
+        }
+
+        private this(string path, core.sys.wasi.dirent.dirent* fd) @safe
         {
             import std.path : buildPath;
 
@@ -4701,6 +5047,65 @@ private struct DirIteratorImpl
             return _followSymlink ? _cur.isDir : attrIsDir(_cur.linkAttributes);
         }
     }
+    else version (WASI_libc)
+    {
+        struct DirHandle
+        {
+            string dirpath;
+            DIR*   h;
+        }
+
+        bool stepIn(string directory) @trusted // TODO: because somehow it doesn't pick the trusted overload of cenforce??
+        {
+            static auto trustedOpendir(string dir) @trusted
+            {
+                return opendir(dir.tempCString());
+            }
+
+            auto h = directory.length ? trustedOpendir(directory) : trustedOpendir(".");
+            cenforce(h, directory);
+            _stack ~= (DirHandle(directory, h));
+            return next();
+        }
+
+        bool next() @trusted
+        {
+            if (_stack.length == 0)
+                return false;
+
+            for (dirent* fdata; (fdata = readdir(_stack[$-1].h)) != null; )
+            {
+                // Skip "." and ".."
+                if (core.stdc.string.strcmp(&fdata.d_name[0], ".") &&
+                    core.stdc.string.strcmp(&fdata.d_name[0], ".."))
+                {
+                    _cur = DirEntry(_stack[$-1].dirpath, fdata);
+                    return true;
+                }
+            }
+
+            popDirStack();
+            return false;
+        }
+
+        void popDirStack() @trusted
+        {
+            assert(_stack.length != 0);
+            closedir(_stack[$-1].h);
+            _stack.popBack();
+        }
+
+        void releaseDirStack() @trusted
+        {
+            foreach (d; _stack)
+                closedir(d.h);
+        }
+
+        bool mayStepIn()
+        {
+            return _followSymlink ? _cur.isDir : attrIsDir(_cur.linkAttributes);
+        }
+    }
 
     this(R)(R pathname, SpanMode mode, bool followSymlink)
         if (isInputRange!R && isSomeChar!(ElementEncodingType!R))
@@ -5231,6 +5636,10 @@ string tempDir() @trusted
                                     "/var/tmp",
                                     "/usr/tmp");
         }
+        else version (WebAssembly)
+            {
+                cache = "/tmp"; // TODO: dunno what makes sense
+            }
         else static assert(false, "Unsupported platform");
 
         if (cache is null) cache = getcwd();
@@ -5313,6 +5722,22 @@ ulong getAvailableDiskSpace(scope const(char)[] path) @safe
             return stats.f_bavail * stats.f_frsize;
         }
     }
+    else version (WebAssembly)
+        {
+            import std.internal.cstring : tempCString;
+
+                {
+                    import core.sys.wasi.sys.statvfs : statvfs, statvfs_t;
+
+                    statvfs_t stats;
+                    auto err = () @trusted {
+                        return statvfs(path.tempCString(), &stats);
+                    } ();
+                    (() @trusted => cenforce(err == 0, "Cannot get available disk space") )(); //TODO: trusted because it won't pick the @trusted  overload of cenforce
+
+                    return stats.f_bavail * stats.f_frsize;
+                }
+        }
     else static assert(0, "Unsupported platform");
 }
 

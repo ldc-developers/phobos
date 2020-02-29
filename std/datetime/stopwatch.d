@@ -97,6 +97,7 @@ public:
     }
 
     ///
+    version (WebAssembly) {} else // TODO: no thread yet
     @system nothrow @nogc unittest
     {
         import core.thread : Thread;
@@ -139,6 +140,7 @@ public:
     }
 
     ///
+    version (WebAssembly) {} else // TODO: no thread yet
     @system nothrow @nogc unittest
     {
         import core.thread : Thread;
@@ -151,6 +153,7 @@ public:
         assert(sw.peek() == Duration.zero);
     }
 
+    version (WebAssembly) {} else // TODO: no thread yet
     @system nothrow @nogc unittest
     {
         import core.thread : Thread;
@@ -186,6 +189,7 @@ public:
     }
 
     ///
+    version (WebAssembly) {} else // TODO: no thread yet
     @system nothrow @nogc unittest
     {
         import core.thread : Thread;
@@ -214,6 +218,7 @@ public:
     }
 
     ///
+    version (WebAssembly) {} else // TODO: no thread yet
     @system nothrow @nogc unittest
     {
         import core.thread : Thread;
@@ -251,6 +256,7 @@ public:
     }
 
     ///
+    version (WebAssembly) {} else // TODO: no thread yet
     @system nothrow @nogc unittest
     {
         import core.thread : Thread;
@@ -296,6 +302,7 @@ public:
     }
 
     ///
+    version (WebAssembly) {} else // TODO: no thread yet
     @system nothrow @nogc unittest
     {
         import core.thread : Thread;
@@ -362,6 +369,7 @@ private:
 }
 
 ///
+version (WebAssembly) {} else // TODO: no thread yet
 @system nothrow @nogc unittest
 {
     import core.thread : Thread;
@@ -440,6 +448,7 @@ Duration[fun.length] benchmark(fun...)(uint n)
     Duration f2Result = r[2]; // time f2 took to run 10,000 times
 }
 
+version (WebAssembly) {} else // TODO: no getpid yet
 @safe nothrow unittest
 {
     import std.conv : to;

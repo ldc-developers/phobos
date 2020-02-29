@@ -123,6 +123,7 @@ private:
 */
 version (Posix)          enum string dirSeparator = "/";
 else version (Windows)   enum string dirSeparator = "\\";
+else version (WebAssembly)   enum string dirSeparator = "/";
 else static assert(0, "unsupported platform");
 
 
@@ -133,6 +134,7 @@ else static assert(0, "unsupported platform");
 */
 version (Posix)          enum string pathSeparator = ":";
 else version (Windows)   enum string pathSeparator = ";";
+else version (WebAssembly)   enum string pathSeparator = ":";
 else static assert(0, "unsupported platform");
 
 
@@ -185,6 +187,7 @@ version (Windows) private bool isSeparator(dchar c)  @safe pure nothrow @nogc
     return isDirSeparator(c) || isDriveSeparator(c);
 }
 version (Posix) private alias isSeparator = isDirSeparator;
+version (WebAssembly) private alias isSeparator = isDirSeparator;
 
 
 /*  Helper function that determines the position of the last
@@ -363,6 +366,7 @@ enum CaseSensitive : bool
 version (Windows)    private enum osDefaultCaseSensitivity = false;
 else version (OSX)   private enum osDefaultCaseSensitivity = false;
 else version (Posix) private enum osDefaultCaseSensitivity = true;
+else version (WebAssembly) private enum osDefaultCaseSensitivity = true;
 else static assert(0);
 
 /**
@@ -776,6 +780,10 @@ private auto _rootName(R)(R path)
     {
         if (isDirSeparator(path[0])) return path[0 .. 1];
     }
+    else version (WebAssembly)
+      {
+        if (isDirSeparator(path[0])) return path[0 .. 1];
+      }
     else version (Windows)
     {
         if (isDirSeparator(path[0]))
@@ -1645,6 +1653,10 @@ if ((isRandomAccessRange!R1 && hasSlicing!R1 && hasLength!R1 && isSomeChar!(Elem
                 {
                     pos = 0;
                 }
+                else version (WebAssembly)
+                  {
+                    pos = 0;
+                  }
                 else version (Windows)
                 {
                     if (isAbsolute(r2))
@@ -2414,6 +2426,19 @@ if ((isRandomAccessRange!R && hasSlicing!R ||
                     popFront();
                 }
             }
+            else version (WebAssembly)
+              {
+                if (_path.length >= 1 && isDirSeparator(_path[0]))
+                  {
+                    fs = 0;
+                    fe = 1;
+                    ps = ltrim(fe, pe);
+                  }
+                else
+                  {
+                    popFront();
+                  }
+              }
             else static assert(0);
 
             if (ps == pe)
@@ -2568,8 +2593,9 @@ if (isRandomAccessRange!R && isSomeChar!(ElementType!R) ||
     is(StringTypeOf!R))
 {
     if (path.length >= 1 && isDirSeparator(path[0])) return true;
-    version (Posix)         return false;
-    else version (Windows)  return isAbsolute!(BaseOf!R)(path);
+    version (Posix)             return false;
+    else version (WebAssembly)  return false;
+    else version (Windows)      return isAbsolute!(BaseOf!R)(path);
 }
 
 ///
@@ -2672,6 +2698,10 @@ else version (Posix)
 {
     alias isAbsolute = isRooted;
 }
+ else version (WebAssembly)
+   {
+     alias isAbsolute = isRooted;
+   }
 
 
 @safe unittest
@@ -3938,7 +3968,12 @@ if (isConvertibleToString!Range)
 */
 string expandTilde(string inputPath) @safe nothrow
 {
-    version (Posix)
+  version (Posix)
+    enum PosixImpl;
+  else version (WebAssembly)
+    enum PosixImpl;
+
+  static if (is(PosixImpl))
     {
         import core.exception : onOutOfMemoryError;
         import core.stdc.errno : errno, ERANGE;
@@ -3996,8 +4031,11 @@ string expandTilde(string inputPath) @safe nothrow
         // Replaces the tilde from path with the path from the user database.
         static string expandFromDatabase(string path) @safe nothrow
         {
-            // bionic doesn't really support this, as getpwnam_r
-            // isn't provided and getpwnam is basically just a stub
+            version (WebAssembly) {
+                return path;
+            } else
+                  // bionic doesn't really support this, as getpwnam_r
+                  // isn't provided and getpwnam is basically just a stub
             version (CRuntime_Bionic)
             {
                 return path;

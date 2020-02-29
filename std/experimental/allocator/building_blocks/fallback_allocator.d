@@ -315,6 +315,7 @@ struct FallbackAllocator(Primary, Fallback)
     () nothrow @nogc { a.deallocate(b2); }();
 }
 
+version(WebAssembly) {} else // TODO: BitmappedBlock isn't supported yet
 @system unittest
 {
     import std.experimental.allocator.building_blocks.bitmapped_block : BitmappedBlockWithInternalPointers;
@@ -354,6 +355,7 @@ struct FallbackAllocator(Primary, Fallback)
     assert(b.length == 100);
 }
 
+version(WebAssembly) {} else // TODO: BitmappedBlock isn't supported yet
 @system unittest
 {
     import std.experimental.allocator.building_blocks.bitmapped_block : BitmappedBlockWithInternalPointers;

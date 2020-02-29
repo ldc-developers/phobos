@@ -69,6 +69,8 @@ void main()
  */
 module std.zip;
 
+version (WebAssembly) version = WASI_libc; // Always use the WASI libc for translating libc calls to wasi, see https://github.com/CraneStation/wasi-libc
+
 //debug=print;
 
 /** Thrown on error.
@@ -167,6 +169,12 @@ final class ArchiveMember
             _madeVersion &= 0x00FF;
             _madeVersion |= 0x0300; // attributes are in UNIX format
         }
+        else version (WASI_libc)
+          {
+            _externalAttributes = (attr & 0xFFFF) << 16;
+            _madeVersion &= 0x00FF;
+            _madeVersion |= 0x0300; // attributes are in UNIX format
+          }
         else version (Windows)
         {
             _externalAttributes = attr;
@@ -201,6 +209,13 @@ final class ArchiveMember
                 return _externalAttributes >> 16;
             return 0;
         }
+        else         version (WASI_libc)
+          {
+            if ((_madeVersion & 0xFF00) == 0x0300)
+              return _externalAttributes >> 16;
+            return 0;
+          }
+
         else version (Windows)
         {
             if ((_madeVersion & 0xFF00) == 0x0000)
@@ -259,7 +274,7 @@ final class ArchiveMember
     @property uint index() const @safe pure nothrow @nogc { return _index; }
     @property uint index(uint value) @safe pure nothrow @nogc { return _index = value; }
 
-    debug(print)
+  debug(WASI_libc)
     {
     void print()
     {

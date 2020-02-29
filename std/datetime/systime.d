@@ -31,6 +31,8 @@ $(TR $(TD Conversion) $(TD
 +/
 module std.datetime.systime;
 
+version (WebAssembly) version = WASI_libc; // Always use the WASI libc for translating libc calls to wasi, see https://github.com/CraneStation/wasi-libc
+
 /// Get the current time as a $(LREF SysTime)
 @safe unittest
 {
@@ -90,6 +92,10 @@ else version (Posix)
     import core.sys.posix.signal : timespec;
     import core.sys.posix.sys.types : time_t;
 }
+ else version (WebAssembly)
+   {
+     public import core.sys.wasi.sys.types : time_t;
+ }
 
 version (unittest)
 {
@@ -156,6 +162,7 @@ public:
         assert(abs(norm1 - norm2) <= seconds(2));
 
         import std.meta : AliasSeq;
+        version (WebAssembly) {} else // TODO: we only have limited ClockType's for now
         static foreach (ct; AliasSeq!(ClockType.coarse, ClockType.precise, ClockType.second))
         {{
             auto value1 = Clock.currTime!ct;
@@ -181,6 +188,8 @@ public:
       +/
     static @property long currStdTime(ClockType clockType = ClockType.normal)() @trusted
     {
+      version (WebAssembly) { // TODO: wasm has not all clocktypes (or I haven't enumed them)
+      } else
         static if (clockType != ClockType.coarse &&
                    clockType != ClockType.normal &&
                    clockType != ClockType.precise &&
@@ -349,8 +358,20 @@ public:
                 }
             }
             else static assert(0, "Unsupported OS");
+        } else version (WebAssembly) {
+            static import core.stdc.time;
+            enum hnsecsToUnixEpoch = unixTimeToStdTime(0);
+
+            enum maxLag = 0; // The amount of time that the implementation may wait additionally to coalesce with other events.
+            import core.sys.wasi.core : __WASI_CLOCK_REALTIME, clock_time_get, __wasi_timestamp_t, __WASI_ESUCCESS;
+            __wasi_timestamp_t time;
+            if (clock_time_get(__WASI_CLOCK_REALTIME, maxLag, &time) != __WASI_ESUCCESS) {
+                import core.internal.abort : abort;
+                abort("Call to wasi_unstable.clock_time_get failed");
+            }
+            return convert!("nsecs", "hnsecs")(time) + hnsecsToUnixEpoch;
         }
-        else static assert(0, "Unsupported OS");
+      else static assert(0, "Unsupported OS");
     }
 
     @safe unittest
@@ -365,6 +386,7 @@ public:
         assert(norm1 <= norm2, format("%s %s", norm1, norm2));
         assert(abs(norm1 - norm2) <= limit);
 
+        version (WebAssembly) {} else // TODO: not many ClockType's are supported right now
         static foreach (ct; AliasSeq!(ClockType.coarse, ClockType.precise, ClockType.second))
         {{
             auto value1 = Clock.currStdTime!ct;
@@ -440,6 +462,7 @@ struct SysTime
 {
     import core.stdc.time : tm;
     version (Posix) import core.sys.posix.sys.time : timeval;
+    version (WASI_libc) import core.sys.wasi.sys.time : timeval;
     import std.typecons : Rebindable;
 
 public:
@@ -6716,6 +6739,12 @@ public:
             import std.datetime.timezone : WindowsTimeZone;
             immutable tz = WindowsTimeZone.getTimeZone("Pacific Standard Time");
         }
+        else
+            version (WebAssembly)
+                {
+                    import std.datetime.timezone : PosixTimeZone;
+                    immutable tz = PosixTimeZone.getTimeZone("America/Los_Angeles");
+                }
 
         {
             auto dt = DateTime(2011, 1, 13, 8, 17, 2);
@@ -11726,12 +11755,18 @@ private @safe:
             immutable otherTZ = lt < 0 ? WindowsTimeZone.getTimeZone("AUS Eastern Standard Time")
                                        : WindowsTimeZone.getTimeZone("Mountain Standard Time");
         }
+        else version (WebAssembly)
+            {
+                import std.datetime.timezone : PosixTimeZone;
+                immutable otherTZ = lt < 0 ? PosixTimeZone.getTimeZone("Australia/Sydney")
+                    : PosixTimeZone.getTimeZone("America/Denver");
+            }
 
         immutable ot = otherTZ.utcToTZ(0);
 
         auto diffs = [0L, lt, ot];
         auto diffAA = [0L : Rebindable!(immutable TimeZone)(UTC())];
-        diffAA[lt] = Rebindable!(immutable TimeZone)(LocalTime());
+        diffAA[lt] = Rebindable!(immutable TimeZone)(LocalTime()) ;
         diffAA[ot] = Rebindable!(immutable TimeZone)(otherTZ);
 
         sort(diffs);

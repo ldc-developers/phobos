@@ -40,6 +40,8 @@ License:    $(HTTP boost.org/LICENSE_1_0.txt, Boost License 1.0)
 */
 module std.parallelism;
 
+version (WebAssembly) {} else:
+
 ///
 @system unittest
 {

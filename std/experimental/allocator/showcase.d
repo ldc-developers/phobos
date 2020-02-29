@@ -57,6 +57,7 @@ Creates a scalable `AllocatorList` of `Regions`, each having at least
 `deallocate` but does free all regions in its destructor. It is recommended for
 short-lived batch applications that count on never running out of memory.
 */
+version (WebAssembly) {} else // TODO: mmap_allocator not supported yet
 auto mmapRegionList(size_t bytesPerRegion)
 {
     static struct Factory

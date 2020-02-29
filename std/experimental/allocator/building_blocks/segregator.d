@@ -406,6 +406,7 @@ if (Args.length > 3)
             == GCAllocator.instance.goodAllocSize(1));
 }
 
+version (WebAssembly) {} else // TODO: BitmappedBlock not available yet
 @system unittest
 {
     import std.experimental.allocator.building_blocks.bitmapped_block : BitmappedBlock;
@@ -464,6 +465,7 @@ if (Args.length > 3)
     assert((() nothrow @nogc => a.deallocate(b))());
 }
 
+version (WebAssembly) {} else // TODO: BitmappedBlock not available yet
 @system unittest
 {
     import std.experimental.allocator.building_blocks.bitmapped_block : BitmappedBlockWithInternalPointers;

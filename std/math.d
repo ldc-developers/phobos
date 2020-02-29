@@ -5923,6 +5923,9 @@ private:
     // The RISC-V (32 & 64 bit) fcsr is 32-bit register.
     uint flags;
 
+    version (IeeeFlagsSupport)
+    {
+
     version (CRuntime_Microsoft)
     {
         // Microsoft uses hardware-incompatible custom constants in fenv.h (core.stdc.fenv).
@@ -5951,6 +5954,7 @@ private:
             INVALID_MASK    = core.stdc.fenv.FE_INVALID,
             EXCEPTIONS_MASK = core.stdc.fenv.FE_ALL_EXCEPT,
         }
+    }
     }
 
 private:
@@ -6586,6 +6590,11 @@ nothrow @nogc:
                                  | inexactException | subnormalException,
         }
     }
+ else version (WebAssembly) {
+     enum : ExceptionMask {
+         allExceptions = 0
+     }
+ }
     else
         static assert(false, "Not implemented for this architecture");
 
@@ -6714,6 +6723,10 @@ private:
     {
         alias ControlState = ushort;
     }
+    else version (WebAssembly)
+    {
+        alias ControlState = uint;
+    }
     else
         static assert(false, "Not implemented for this architecture");
 
@@ -6824,6 +6837,8 @@ private:
             {
                 cont = __asm!ControlState("vmrs $0, FPSCR", "=r");
             }
+            else version (WebAssembly)
+                cont = 0;
             else
                 assert(0, "Not yet supported");
 

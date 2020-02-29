@@ -295,6 +295,7 @@ struct Bucketizer(Allocator, size_t min, size_t max, size_t step)
 }
 
 // Test alignedAllocate
+version (WebAssembly) {} else // TODO: BitmappedBlock isn't supported yet
 @system unittest
 {
     import std.experimental.allocator.building_blocks.bitmapped_block : BitmappedBlock;
@@ -317,6 +318,7 @@ struct Bucketizer(Allocator, size_t min, size_t max, size_t step)
     assert((() pure nothrow @safe @nogc => !a.expand(b, 1))());
 }
 
+version (WebAssembly) {} else // TODO: BitmappedBlock isn't supported yet
 @system unittest
 {
     import std.experimental.allocator.building_blocks.bitmapped_block : BitmappedBlock;

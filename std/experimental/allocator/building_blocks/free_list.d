@@ -1181,6 +1181,7 @@ struct SharedFreeList(ParentAllocator,
     assert(a.approxMaxLength  == 1);
 }
 
+version (WebAssembly) {} else // TODO: ThreadGroup isn't supported yet
 @system unittest
 {
     import core.thread : ThreadGroup;

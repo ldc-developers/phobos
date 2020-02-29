@@ -663,6 +663,7 @@ It should perform slightly better because instead of searching through one
 large free list, it searches through several shorter lists in LRU order. Also,
 it actually returns memory to the operating system when possible.
 */
+version (WebAssembly) {} else // TODO: no mmap_allocator support yet
 @system unittest
 {
     import std.algorithm.comparison : max;
@@ -706,6 +707,7 @@ it actually returns memory to the operating system when possible.
     }
 }
 
+version (WebAssembly) {} else // TODO: no mmap_allocator support yet
 @system unittest
 {
     import std.algorithm.comparison : max;

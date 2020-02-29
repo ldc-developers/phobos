@@ -208,6 +208,7 @@ version (Windows)
 /**
    Aligned allocator using OS-specific primitives, under a uniform API.
  */
+version (WebAssembly) {} else // TODO: we don't support alignedAllocator yet
 struct AlignedMallocator
 {
     @system unittest { testAllocator!(() => typeof(this).instance); }
@@ -272,6 +273,7 @@ version (LDC_AddressSanitizer)
         auto result = _aligned_malloc(bytes, a);
         return result ? result[0 .. bytes] : null;
     }
+    else version (WebAssembly) {}
     else static assert(0);
 
     /**
@@ -292,6 +294,14 @@ version (LDC_AddressSanitizer)
     bool deallocate(void[] b) shared
     {
         _aligned_free(b.ptr);
+        return true;
+    }
+    else version (WebAssembly)
+    @system @nogc nothrow
+    bool deallocate(void[] b) shared
+    {
+        import core.stdc.stdlib : free;
+        free(b.ptr);
         return true;
     }
     else static assert(0);

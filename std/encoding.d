@@ -2633,8 +2633,16 @@ abstract class EncodingScheme
         }
 
         static shared bool initialized;
-        import std.concurrency : initOnce;
-        initOnce!initialized(registerDefaultEncodings());
+        version (WebAssembly) {
+            // TODO: can be removed if std.concurrency is supported
+            if (!initialized) {
+                initialized = true;
+                registerDefaultEncodings();
+            }
+        } else {
+            import std.concurrency : initOnce;
+            initOnce!initialized(registerDefaultEncodings());
+        }
         encodingName = toLower(encodingName);
 
         if (auto p = encodingName in supported)

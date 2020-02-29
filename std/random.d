@@ -1669,11 +1669,13 @@ else
             x = (x ^ (x >>> 47)) * m;
             result = (result ^ x) * m;
         }
-        import core.thread : getpid, Thread;
-        import core.time : MonoTime;
+        version (WebAssembly) {} else {
+            import core.thread : getpid, Thread;
 
-        updateResult(cast(ulong) cast(void*) Thread.getThis());
-        updateResult(cast(ulong) getpid());
+            updateResult(cast(ulong) cast(void*) Thread.getThis());
+            updateResult(cast(ulong) getpid());
+        }
+        import core.time : MonoTime;
         updateResult(cast(ulong) MonoTime.currTime.ticks);
         result = (result ^ (result >>> 47)) * m;
         return result ^ (result >>> 47);

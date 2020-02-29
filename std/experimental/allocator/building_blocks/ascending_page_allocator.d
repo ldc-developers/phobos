@@ -3,6 +3,9 @@
 Source: $(PHOBOSSRC std/experimental/allocator/building_blocks/ascending_page_allocator.d)
 */
 module std.experimental.allocator.building_blocks.ascending_page_allocator;
+
+version (WebAssembly) {} else: // TODO: I don't think we support mmap ?? do we ??
+
 import std.experimental.allocator.common;
 
 // Common implementations for shared and thread local AscendingPageAllocator

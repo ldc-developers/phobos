@@ -27,6 +27,8 @@ $(TR $(TD Utilities) $(TD
 +/
 module std.datetime.timezone;
 
+version (WebAssembly) version = WASI_libc; // Always use the WASI libc for translating libc calls to wasi, see https://github.com/CraneStation/wasi-libc
+
 import core.time : abs, convert, dur, Duration, hours, minutes;
 import std.datetime.systime : Clock, stdTimeToUnixTime, SysTime;
 import std.range.primitives : back, empty, front, isOutputRange, popFront;
@@ -50,6 +52,11 @@ else version (Posix)
     import core.sys.posix.signal : timespec;
     import core.sys.posix.sys.types : time_t;
 }
+ else version (WASI_libc)
+   {
+     import core.sys.wasi.signal : timespec;
+     import core.sys.wasi.sys.types : time_t;
+   }
 
 version (unittest) import std.exception : assertThrown;
 
@@ -186,6 +193,7 @@ public:
     // Since reading in the time zone files could be expensive, most unit tests
     // are consolidated into this one unittest block which minimizes how often
     // it reads a time zone file.
+    version (WebAssembly) {} else // TODO: ignore for now
     @system unittest
     {
         import core.exception : AssertError;
@@ -215,6 +223,12 @@ public:
                 immutable tz = PosixTimeZone.getTimeZone(tzName);
                 assert(tz.name == tzName);
             }
+            else             version (WebAssembly)
+                {
+                    immutable tz = PosixTimeZone.getTimeZone(tzName);
+                    assert(tz.name == tzName);
+                }
+
             else version (Windows)
             {
                 immutable tz = WindowsTimeZone.getTimeZone(tzName);
@@ -610,7 +624,12 @@ public:
             }
             catch (Exception e)
                 assert(0, "GetTimeZoneInformation() returned invalid UTF-16.");
-        }
+        } else
+            version (WebAssembly)
+              {
+                // TODO: have no idea what to return here since wasm doesn't have tzname
+                return "UTC";
+              }
     }
 
     @safe unittest
@@ -695,7 +714,12 @@ public:
             }
             catch (Exception e)
                 assert(0, "GetTimeZoneInformation() returned invalid UTF-16.");
-        }
+        } else
+            version (WebAssembly)
+              {
+                // TODO: have no idea what to return here since wasm doesn't have tzname
+                return "UTC";
+              }
     }
 
     @safe unittest
@@ -739,7 +763,11 @@ public:
       +/
     @property override bool hasDST() @trusted const nothrow
     {
-        version (Posix)
+      version (Posix)
+        enum PosixImpl;
+      else version (WebAssembly)
+        enum PosixImpl;
+      static if (is (PosixImpl))
         {
             static if (is(typeof(daylight)))
                 return cast(bool)(daylight);
@@ -831,6 +859,15 @@ public:
 
             return WindowsTimeZone._dstInEffect(&tzInfo, stdTime);
         }
+        else version (WASI_libc)
+          {
+            import core.sys.wasi.time : localtime_r;
+
+            tm timeInfo = void;
+            localtime_r(&unixTime, &timeInfo);
+
+            return cast(bool)(timeInfo.tm_isdst);
+          }
     }
 
     @safe unittest
@@ -873,6 +910,16 @@ public:
 
             return WindowsTimeZone._utcToTZ(&tzInfo, stdTime, hasDST);
         }
+        else version (WASI_libc)
+          {
+            import core.stdc.time : tm;
+            import core.sys.wasi.time : localtime_r;
+            time_t unixTime = stdTimeToUnixTime(stdTime);
+            tm timeInfo = void;
+            localtime_r(&unixTime, &timeInfo);
+
+            return stdTime + convert!("seconds", "hnsecs")(timeInfo.tm_gmtoff);
+          }
     }
 
     @safe unittest
@@ -895,10 +942,18 @@ public:
       +/
     override long tzToUTC(long adjTime) @trusted const nothrow
     {
-        version (Posix)
+        version (Posix) {
+            import core.sys.posix.time : localtime_r;
+            enum PosixImpl;
+        }
+        else version (WASI_libc) {
+            import core.sys.wasi.time : localtime_r;
+            enum PosixImpl;
+        }
+
+        static if (is(PosixImpl))
         {
             import core.stdc.time : tm;
-            import core.sys.posix.time : localtime_r;
             time_t unixTime = stdTimeToUnixTime(adjTime);
 
             immutable past = unixTime - cast(time_t) convert!("days", "seconds")(1);
@@ -1090,10 +1145,17 @@ private:
     static immutable(LocalTime) singleton() @trusted
     {
         import core.stdc.time : tzset;
-        import std.concurrency : initOnce;
         static instance = new immutable(LocalTime)();
         static shared bool guard;
-        initOnce!guard({tzset(); return true;}());
+        version (WebAssembly) {
+            if (!guard) {
+                tzset();
+                guard = true;
+            }
+        } else {
+            import std.concurrency : initOnce;
+            initOnce!guard({tzset(); return true;}());
+        }
         return instance;
     }
 
@@ -2025,6 +2087,10 @@ public:
         enum defaultTZDatabaseDir = "/usr/share/zoneinfo/";
     }
     else version (Windows)
+    {
+        enum defaultTZDatabaseDir = "";
+    }
+    else version (WebAssembly)
     {
         enum defaultTZDatabaseDir = "";
     }

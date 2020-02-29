@@ -1205,6 +1205,7 @@ Params:
         Although limited by single block allocations, `No.multiblock` will generally
         provide higher performance.
 */
+      version (WebAssembly) {} else // TODO: AlignedMallocator isn't supported yet
 struct BitmappedBlock(size_t theBlockSize, uint theAlignment = platformAlignment,
    ParentAllocator = NullAllocator, Flag!"multiblock" f = Yes.multiblock)
 {
@@ -2159,6 +2160,7 @@ The time complexity of `resolveInternalPointer` is $(BIGOH k), where `k`
 is the size of the object within which the internal pointer is looked up.
 
 */
+version (WebAssembly) {} else // TODO: BitmappedBlock isn't supported yet
 struct BitmappedBlockWithInternalPointers(
     size_t theBlockSize, uint theAlignment = platformAlignment,
     ParentAllocator = NullAllocator)
