@@ -232,53 +232,9 @@ else version (MINGW_IO)
     extern (C)
     {
         int setmode(int, int);
+        int fgetwc(FILE*);
+        int fputwc(wchar_t, FILE*);
     }
-
-    import core.sync.mutex;
-
-    __gshared Mutex lockMutex;
-    __gshared Mutex[uint] fileLocks;
-
-    void flockfile(FILE* fp)
-    {
-        Mutex mutex;
-
-        if (lockMutex is null)
-             lockMutex = new Mutex;
-
-        lockMutex.lock();
-
-        if (fp._file in fileLocks)
-        {
-            mutex = fileLocks[fp._file];
-        }
-        else
-        {
-            mutex = new Mutex();
-            fileLocks[fp._file] = mutex;
-        }
-        mutex.lock();
-
-        lockMutex.unlock();
-    }
-
-    void funlockfile(FILE* fp)
-    {
-        Mutex mutex;
-
-        if (lockMutex is null)
-             lockMutex = new Mutex;
-        lockMutex.lock();
-
-        if (fp._file in fileLocks)
-        {
-            mutex = fileLocks[fp._file];
-            mutex.unlock();
-        } else
-        { /* Should this be an error */ }
-        lockMutex.unlock();
-    }
-
 
     int fputc_unlocked(int c, _iobuf* fp) { return fputc(c, cast(shared) fp); }
     int fputwc_unlocked(int c, _iobuf* fp)
@@ -288,24 +244,16 @@ else version (MINGW_IO)
     int fgetc_unlocked(_iobuf* fp) { return fgetc(cast(shared) fp); }
     int fgetwc_unlocked(_iobuf* fp) { return fgetwc(cast(shared) fp); }
 
-    extern (C)
-    {
-      nothrow:
-      @nogc:
-        FILE* _fdopen(int, const (char)*);
-    }
+    alias FPUTC = fputc_unlocked;
+    alias FPUTWC = fputwc_unlocked;
+    alias FGETC = fgetc_unlocked;
+    alias FGETWC = fgetwc_unlocked;
 
-    alias fputc_unlocked FPUTC;
-    alias fputwc_unlocked FPUTWC;
-    alias fgetc_unlocked FGETC;
-    alias fgetwc_unlocked FGETWC;
+    alias FLOCK = _lock_file;
+    alias FUNLOCK = _unlock_file;
 
-    alias flockfile FLOCK;
-    alias funlockfile FUNLOCK;
-
-    alias setmode _setmode;
-    int _fileno(FILE* f) { return f._file; }
-    alias _fileno fileno;
+    alias _setmode = setmode;
+    alias _fileno = fileno;
 
     enum
     {
@@ -5512,7 +5460,7 @@ private size_t readlnImpl(FILE* fps, ref char[] buf, dchar terminator, File.Orie
                     encode(buf, c);
                 }
             }
-            if (ferror(fp))
+            if (ferror(fps))
                 StdioException();
             return buf.length;
         }
