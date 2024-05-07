@@ -181,6 +181,12 @@ private:
                 asm pure nothrow @nogc { "frflags %0" : "=r" (result); }
                 return result;
             }
+            else version (LoongArch_Any)
+            {
+                uint result;
+                asm pure nothrow @nogc { "movfcsr2gr %0, $fcsr2" : "=r" (result); }
+                return result & EXCEPTIONS_MASK;
+            }
             else
                 assert(0, "Not yet supported");
         }
@@ -211,7 +217,7 @@ private:
             uint result = void;
             asm pure nothrow @nogc
             {
-                "movfcsr2gr %0,$r2" : "=r" (result);
+                "movfcsr2gr %0, $fcsr2" : "=r" (result);
             }
             return result & EXCEPTIONS_MASK;
         }
@@ -265,7 +271,7 @@ private:
         {
             asm nothrow @nogc
             {
-                "movgr2fcsr $r2,$r0";
+                "movgr2fcsr $fcsr2,$r0";
             }
         }
         else version (LDC)
@@ -983,6 +989,10 @@ private:
             {
                 resetIeeeFlags();
             }
+            else version (LoongArch_Any)
+            {
+                resetIeeeFlags();
+            }
             else
                 static assert(false, "Not implemented for this architecture");
         }
@@ -1049,6 +1059,11 @@ private:
             {
                 asm pure nothrow @nogc { "frcsr %0" : "=r" (cont); }
             }
+            else version (LoongArch_Any)
+            {
+                asm pure nothrow @nogc { "movfcsr2gr %0, $fcsr0" : "=r" (cont); }
+                cont &= (roundingMask | allExceptions);
+            }
             else
                 assert(0, "Not yet supported");
 
@@ -1088,7 +1103,7 @@ private:
             ControlState cont;
             asm pure nothrow @nogc
             {
-                "movfcsr2gr %0,$r0" : "=r" (cont);
+                "movfcsr2gr %0, $fcsr0" : "=r" (cont);
             }
             cont &= (roundingMask | allExceptions);
             return cont;
@@ -1166,7 +1181,7 @@ private:
         {
             asm nothrow @nogc
             {
-                "movgr2fcsr $r0,%0" :
+                "movgr2fcsr $fcsr0, %0" :
                 : "r" (newState & (roundingMask | allExceptions));
             }
         }
