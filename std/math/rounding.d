@@ -580,6 +580,18 @@ float rint(float x) @safe pure nothrow @nogc
  * If using the default rounding mode (ties round to even integers)
  * lrint(4.5) == 4, lrint(5.5)==6.
  */
+version (LDC)
+{
+    pragma(inline, true):
+    long lrint(real   x) @safe pure nothrow @nogc { return llvm_llrint(x); }
+    ///ditto
+    long lrint(double x) @safe pure nothrow @nogc { return llvm_llrint(x); }
+    ///ditto
+    long lrint(float  x) @safe pure nothrow @nogc { return llvm_llrint(x); }
+}
+else
+{
+
 long lrint(real x) @trusted pure nothrow @nogc
 {
     version (InlineAsm_X87)
@@ -757,6 +769,8 @@ long lrint(real x) @trusted pure nothrow @nogc
     }
 }
 
+} // !LDC
+
 ///
 @safe pure nothrow @nogc unittest
 {
@@ -846,10 +860,24 @@ version (Posix)
  * If the fractional part of x is exactly 0.5, the return value is rounded
  * away from zero.
  */
+version (LDC)
+{
+    pragma(inline, true):
+    long lround(real   x) @safe nothrow @nogc { return llvm_llround(x); }
+    ///ditto
+    long lround(double x) @safe nothrow @nogc { return llvm_llround(x); }
+    ///ditto
+    long lround(float  x) @safe nothrow @nogc { return llvm_llround(x); }
+}
+else
+{
+
 long lround(real x) @trusted nothrow @nogc
 {
     return core.stdc.math.llroundl(x);
 }
+
+} // !LDC
 
 ///
 @safe nothrow @nogc unittest
