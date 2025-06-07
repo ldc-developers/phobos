@@ -978,7 +978,11 @@ public:
             uint [] wasteful = new BigDigit[x.data.length];
             wasteful[] = x.data[];
             immutable rem = multibyteDivAssign(wasteful, y, 0);
-            () @trusted { GC.free(wasteful.ptr); } ();
+            if (!__ctfe)
+            {
+                //use free only at runtime
+                () @trusted { GC.free(wasteful.ptr); } ();
+            }
             return rem;
         }
     }
@@ -1317,6 +1321,13 @@ pure @safe unittest
    assert(s == 5);
 }
 
+pure @safe unittest
+{ //evaluate mod at compile time
+   enum BigUint r = BigUint([5]);
+   enum BigUint t = BigUint([7]);
+   enum BigUint s = BigUint.mod(r, t);
+   static assert(s == 5);
+}
 
 @safe pure unittest
 {
@@ -1763,7 +1774,11 @@ void mulInternal(BigDigit[] result, const(BigDigit)[] x, const(BigDigit)[] y)
             mulKaratsuba(result[half .. $], y, x[half .. $], scratchbuff);
             BigDigit c = addAssignSimple(result[half .. half + y.length], partial);
             if (c) multibyteIncrementAssign!('+')(result[half + y.length..$], c);
-            () @trusted { GC.free(scratchbuff.ptr); } ();
+            if (!__ctfe)
+            {
+                //use free only at runtime
+                () @trusted { GC.free(scratchbuff.ptr); } ();
+            }
         }
         else
         {
@@ -1822,7 +1837,11 @@ void mulInternal(BigDigit[] result, const(BigDigit)[] x, const(BigDigit)[] y)
                 addAssignSimple(result[done .. done + y.length + chunksize], partial);
                 done += chunksize;
             }
-            () @trusted { GC.free(scratchbuff.ptr); } ();
+            if (!__ctfe)
+            {
+                //use free only at runtime
+                () @trusted { GC.free(scratchbuff.ptr); } ();
+            }
         }
     }
     else
@@ -1830,7 +1849,11 @@ void mulInternal(BigDigit[] result, const(BigDigit)[] x, const(BigDigit)[] y)
         // Balanced. Use Karatsuba directly.
         BigDigit [] scratchbuff = new BigDigit[karatsubaRequiredBuffSize(x.length)];
         mulKaratsuba(result, x, y, scratchbuff);
-        () @trusted { GC.free(scratchbuff.ptr); } ();
+        if (!__ctfe)
+        {
+            //use free only at runtime
+            () @trusted { GC.free(scratchbuff.ptr); } ();
+        }
     }
 }
 
@@ -1866,24 +1889,28 @@ void mulInternal(BigDigit[] result, const(BigDigit)[] x, const(BigDigit)[] y)
  */
 void squareInternal(BigDigit[] result, const BigDigit[] x) pure nothrow @safe
 {
-  import core.memory : GC;
-  // Squaring is potentially half a multiply, plus add the squares of
-  // the diagonal elements.
-  assert(result.length == 2*x.length,
-     "result needs to have twice the capacity of x");
-  if (x.length <= KARATSUBASQUARELIMIT)
-  {
-      if (x.length == 1)
-      {
-         result[1] = multibyteMul(result[0 .. 1], x, x[0], 0);
-         return;
-      }
-      return squareSimple(result, x);
-  }
-  // The nice thing about squaring is that it always stays balanced
-  BigDigit [] scratchbuff = new BigDigit[karatsubaRequiredBuffSize(x.length)];
-  squareKaratsuba(result, x, scratchbuff);
-  () @trusted { GC.free(scratchbuff.ptr); } ();
+    import core.memory : GC;
+    // Squaring is potentially half a multiply, plus add the squares of
+    // the diagonal elements.
+    assert(result.length == 2*x.length,
+        "result needs to have twice the capacity of x");
+    if (x.length <= KARATSUBASQUARELIMIT)
+    {
+        if (x.length == 1)
+        {
+            result[1] = multibyteMul(result[0 .. 1], x, x[0], 0);
+            return;
+        }
+        return squareSimple(result, x);
+    }
+    // The nice thing about squaring is that it always stays balanced
+    BigDigit [] scratchbuff = new BigDigit[karatsubaRequiredBuffSize(x.length)];
+    squareKaratsuba(result, x, scratchbuff);
+    if (!__ctfe)
+    {
+        //use free only at runtime
+        () @trusted { GC.free(scratchbuff.ptr); } ();
+    }
 }
 
 
@@ -1935,7 +1962,11 @@ void divModInternal(BigDigit [] quotient, BigDigit[] remainder, const BigDigit [
         if (s == 0) remainder[] = un[0 .. vn.length];
         else multibyteShr(remainder, un[0 .. vn.length+1], s);
     }
-    () @trusted { GC.free(un.ptr); GC.free(vn.ptr); } ();
+    if (!__ctfe)
+    {
+        //use free only at runtime
+        () @trusted { GC.free(un.ptr); GC.free(vn.ptr); } ();
+    }
 }
 
 pure @safe unittest
@@ -2880,7 +2911,11 @@ pure nothrow @safe
         m -= v.length;
     }
     recursiveDivMod(quotient[0 .. m], u[0 .. m + v.length], v, scratch);
-    () @trusted { GC.free(scratch.ptr); } ();
+    if (!__ctfe)
+    {
+        //use free only at runtime
+        () @trusted { GC.free(scratch.ptr); } ();
+    }
 }
 
 @system unittest
