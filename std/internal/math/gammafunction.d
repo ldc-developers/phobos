@@ -260,23 +260,25 @@ real igammaTemmeLarge(real a, real x, bool compl)
 
 @safe unittest
 {
+    enum real64 = real.mant_dig == double.mant_dig;
+
     // Values were generated using scipy, which restricts values to double precision.
     assert(feqrel(igammaTemmeLarge(25.0, 25.0, true), 0.47339_84685_56349_37L) >= double.mant_dig);
-    assert(feqrel(igammaTemmeLarge(25.0, 26.0, true), 0.39592_65699_99828_5L) >= double.mant_dig);
-    assert(feqrel(igammaTemmeLarge(26.0, 25.0, true), 0.55292_14200_24414_8L) >= double.mant_dig);
+    assert(feqrel(igammaTemmeLarge(25.0, 26.0, true), 0.39592_65699_99828_5L) >= double.mant_dig - (real64 ? 2 : 0));
+    assert(feqrel(igammaTemmeLarge(26.0, 25.0, true), 0.55292_14200_24414_8L) >= double.mant_dig - (real64 ? 1 : 0));
 
     assert(feqrel(igammaTemmeLarge(25.0, 25.0, false), 0.52660_15314_43650_6L) >= double.mant_dig);
-    assert(feqrel(igammaTemmeLarge(26.0, 25.0, false), 0.44707_85799_75585_2L) >= double.mant_dig);
+    assert(feqrel(igammaTemmeLarge(26.0, 25.0, false), 0.44707_85799_75585_2L) >= double.mant_dig - (real64 ? 3 : 0));
 
     assert(
         feqrel(igammaTemmeLarge(30.0L,31.0L,true), 1.0L-igammaTemmeLarge(30.0L,31.0L,false))
-        >= real.mant_dig - 1);
+        >= real.mant_dig - (real64 ? 2 : 1));
 
     assert(feqrel(igammaTemmeLarge(1e9, 1.1e9, false), 1.0) >= double.mant_dig);
     assert(feqrel(igammaTemmeLarge(1.1e9, 1e9, false), 0.0) >= double.mant_dig);
 
     assert(
-        feqrel(igammaTemmeLarge(1e6, 1e6 + 1.0, true), 0.49946_80772_57932_46L) >= double.mant_dig);
+        feqrel(igammaTemmeLarge(1e6, 1e6 + 1.0, true), 0.49946_80772_57932_46L) >= double.mant_dig - (real64 ? 9 : 0));
 }
 
 } // private
