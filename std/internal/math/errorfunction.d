@@ -984,6 +984,9 @@ Journal of Statistical Software <b>11</b>, (July 2004).
 */
 real normalDistributionImpl(real a)
 {
+    if (a is -real.infinity) return 0.0L;
+    if (a is real.infinity) return 1.0L;
+
     real x = a * SQRT1_2;
     real z = fabs(x);
 
@@ -1013,6 +1016,8 @@ version (LDC_MSVC_X86)
 }
 else
     assert(isIdentical(normalDistributionImpl(NaN(0x325)), NaN(0x325)));
+assert(normalDistributionImpl(-real.infinity) == 0.0L);
+assert(normalDistributionImpl(real.infinity) == 1.0L);
 }
 
 /*
