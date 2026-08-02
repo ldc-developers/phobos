@@ -1566,7 +1566,8 @@ class StdForwardLogger : Logger
     auto nl1 = new StdForwardLogger(LogLevel.all);
 }
 
-@safe unittest
+version (WASI) {} // WASI is single-threaded
+else @safe unittest
 {
     import core.thread : Thread, msecs;
 
@@ -2894,7 +2895,8 @@ private void trustedStore(T)(ref shared T dst, ref T src) @trusted
 
 // check that thread-local logging does not propagate
 // to shared logger
-@system unittest
+version (WASI) {} // WASI is single-threaded
+else @system unittest
 {
     import core.thread, std.concurrency;
 

@@ -364,7 +364,8 @@ struct AlignedBlockList(Allocator, ParentAllocator, ulong theAlignment = (1 << 2
 }
 
 ///
-@system unittest
+version (WebAssembly) {}
+else @system unittest
 {
     import std.experimental.allocator.building_blocks.ascending_page_allocator : AscendingPageAllocator;
     import std.experimental.allocator.building_blocks.segregator : Segregator;
@@ -524,7 +525,8 @@ shared struct SharedAlignedBlockList(Allocator, ParentAllocator, ulong theAlignm
 }
 
 ///
-@system unittest
+version (WebAssembly) {}
+else @system unittest
 {
     import std.experimental.allocator.building_blocks.region : SharedBorrowedRegion;
     import std.experimental.allocator.building_blocks.ascending_page_allocator : SharedAscendingPageAllocator;
@@ -580,7 +582,8 @@ version (StdUnittest)
     }
 }
 
-@system unittest
+version (WebAssembly) {}
+else @system unittest
 {
     import std.experimental.allocator.building_blocks.region;
     import std.experimental.allocator.building_blocks.ascending_page_allocator;
@@ -640,7 +643,8 @@ version (StdUnittest)
     }
 }
 
-@system unittest
+version (WebAssembly) {}
+else @system unittest
 {
     import std.experimental.allocator.building_blocks.ascending_page_allocator : AscendingPageAllocator;
     import std.experimental.allocator.building_blocks.segregator : Segregator;

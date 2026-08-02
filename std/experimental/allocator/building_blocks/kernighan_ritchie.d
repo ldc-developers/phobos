@@ -674,7 +674,8 @@ It should perform slightly better because instead of searching through one
 large free list, it searches through several shorter lists in LRU order. Also,
 it actually returns memory to the operating system when possible.
 */
-@system unittest
+version (WebAssembly) {}
+else @system unittest
 {
     import std.algorithm.comparison : max;
     import std.experimental.allocator.building_blocks.allocator_list
@@ -715,7 +716,8 @@ it actually returns memory to the operating system when possible.
     }
 }
 
-@system unittest
+version (WebAssembly) {}
+else @system unittest
 {
     import std.algorithm.comparison : max;
     import std.experimental.allocator.building_blocks.allocator_list

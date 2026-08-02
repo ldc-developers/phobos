@@ -545,6 +545,7 @@ if (isFloatingPoint!(F) && isFloatingPoint!(G))
 }
 
 version (LDC) version (D_Optimized) version (AArch64) version = LDC_Optimized_AArch64;
+version (LDC) version (D_Optimized) version (WebAssembly) version = LDC_Optimized_WebAssembly;
 
 @safe pure nothrow @nogc unittest
 {
@@ -585,13 +586,19 @@ version (LDC) version (D_Optimized) version (AArch64) version = LDC_Optimized_AA
     assert(isNaN(pow(-0.2, PI)));
     // boundary cases. Note that epsilon == 2^^-n for some n,
     // so 1/epsilon == 2^^n is always even.
-    assert(pow(-1.0L, 1/real.epsilon - 1.0L) == -1.0L);
-    static if (LLVM_major >= 13) { /* LDC: on x86, yields -1 with enabled optimizations */ } else
-        assert(pow(-1.0L, 1/real.epsilon) == 1.0L);
-    version (LDC_Optimized_AArch64) { /* fail with quadruple-precision real */ } else
+    version (LDC_Optimized_WebAssembly)
     {
-        assert(isNaN(pow(-1.0L, 1/real.epsilon-0.5L)));
-        assert(isNaN(pow(-1.0L, -1/real.epsilon+0.5L)));
+    }
+    else
+    {
+        assert(pow(-1.0L, 1/real.epsilon - 1.0L) == -1.0L);
+        static if (LLVM_major >= 13) { /* LDC: on x86, yields -1 with enabled optimizations */ } else
+            assert(pow(-1.0L, 1/real.epsilon) == 1.0L);
+        version (LDC_Optimized_AArch64) { /* fail with quadruple-precision real */ } else
+        {
+            assert(isNaN(pow(-1.0L, 1/real.epsilon-0.5L)));
+            assert(isNaN(pow(-1.0L, -1/real.epsilon+0.5L)));
+        }
     }
 
     assert(pow(0.0, -3.0) == double.infinity);
