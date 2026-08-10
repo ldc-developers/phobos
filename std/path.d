@@ -4063,6 +4063,10 @@ string expandTilde(return scope const string inputPath) @safe nothrow
             {
                 return path;
             }
+            else version (Emscripten) // nor Emscripten
+            {
+                return path;
+            }
             else
             {
                 import core.sys.posix.pwd : passwd, getpwnam_r;

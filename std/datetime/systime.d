@@ -416,6 +416,32 @@ public:
                            hnsecsToUnixEpoch;
                 }
             }
+            else version (Emscripten)
+            {
+                static if (clockType == ClockType.second)
+                    return unixTimeToStdTime(core.stdc.time.time(null));
+                else
+                {
+                    import core.sys.posix.time : clock_gettime, CLOCK_REALTIME;
+                    static if (clockType == ClockType.coarse)       alias clockArg = CLOCK_REALTIME;
+                    else static if (clockType == ClockType.normal)  alias clockArg = CLOCK_REALTIME;
+                    else static if (clockType == ClockType.precise) alias clockArg = CLOCK_REALTIME;
+                    else static assert(0, "Previous static if is wrong.");
+                    timespec ts = void;
+                    immutable error = clock_gettime(clockArg, &ts);
+                    // Posix clock_gettime called with a valid address and valid clock_id is only
+                    // permitted to fail if the number of seconds does not fit in time_t. If tv_sec
+                    // is long or larger overflow won't happen before 292 billion years A.D.
+                    static if (ts.tv_sec.max < long.max)
+                    {
+                        if (error)
+                            throw new TimeException("Call to clock_gettime() failed");
+                    }
+                    return convert!("seconds", "hnsecs")(ts.tv_sec) +
+                           ts.tv_nsec / 100 +
+                           hnsecsToUnixEpoch;
+                }
+            }
             else version (CRuntime_WASI)
             {
                 static if (clockType == ClockType.second)
@@ -2718,13 +2744,20 @@ public:
         import std.conv : to;
         import core.time;
 
-        version (CRuntime_WASI) {}
+        version (CRuntime_WASI)
+            enum supportsTZEnvVar = false;
+        else version (Emscripten)
+            enum supportsTZEnvVar = false;
         else version (Posix)
         {
+            enum supportsTZEnvVar = true;
+
             import std.datetime.timezone : clearTZEnvVar, setTZEnvVar;
             setTZEnvVar("America/Los_Angeles");
             scope(exit) clearTZEnvVar();
         }
+        else
+            enum supportsTZEnvVar = false;
 
         {
             auto timeInfo = SysTime(DateTime(1970, 1, 1)).toTM();
@@ -2743,8 +2776,7 @@ public:
             else version (Windows)
                 assert(timeInfo.tm_isdst == 0 || timeInfo.tm_isdst == 1);
 
-            version (CRuntime_WASI) {}
-            else version (Posix)
+            static if (supportsTZEnvVar)
             {
                 assert(timeInfo.tm_gmtoff == -8 * 60 * 60);
                 assert(to!string(timeInfo.tm_zone) == "PST");
@@ -2765,13 +2797,14 @@ public:
 
             version (CRuntime_WASI)
                 assert(timeInfo.tm_isdst == 0 || timeInfo.tm_isdst == 1);
+            else version (Emscripten)
+                assert(timeInfo.tm_isdst == 0 || timeInfo.tm_isdst == 1);
             else version (Posix)
                 assert(timeInfo.tm_isdst == 1);
             else version (Windows)
                 assert(timeInfo.tm_isdst == 0 || timeInfo.tm_isdst == 1);
 
-            version (CRuntime_WASI) {}
-            else version (Posix)
+            static if (supportsTZEnvVar)
             {
                 assert(timeInfo.tm_gmtoff == -7 * 60 * 60);
                 assert(to!string(timeInfo.tm_zone) == "PDT");

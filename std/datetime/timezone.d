@@ -64,6 +64,12 @@ else version (Posix)
 version (StdUnittest) import std.exception : assertThrown;
 
 
+version (CRuntime_WASI) {}
+else version (Emscripten) {} // tzset() doesn't respect the TZ env var in non-standalone-wasm mode
+else version (Posix)
+    version = TZEnvVar_Support;
+
+
 /++
     Represents a time zone. It is used with $(REF SysTime,std,datetime,systime)
     to indicate the time zone of a $(REF SysTime,std,datetime,systime).
@@ -255,8 +261,7 @@ public:
             assert(cast(DateTime) dst == dstDate);
             assert(std == stdUTC);
 
-            version (CRuntime_WASI) {}
-            else version (Posix)
+            version (TZEnvVar_Support)
             {
                 setTZEnvVar(tzName);
 
@@ -649,7 +654,7 @@ public:
         {
             assert(LocalTime().stdName !is null);
 
-            version (Posix)
+            version (TZEnvVar_Support)
             {
                 scope(exit) clearTZEnvVar();
 
@@ -727,12 +732,14 @@ public:
     else @safe unittest
     {
         // tzname, called from dstName, isn't set by default for Musl.
-        version (CRuntime_Musl)
+        version (Emscripten)
+            assert(LocalTime().dstName !is null);
+        else version (CRuntime_Musl)
             assert(LocalTime().dstName is null);
         else
             assert(LocalTime().dstName !is null);
 
-        version (Posix)
+        version (TZEnvVar_Support)
         {
             scope(exit) clearTZEnvVar();
 
@@ -799,8 +806,7 @@ public:
     {
         LocalTime().hasDST;
 
-        version (CRuntime_WASI) {}
-        else version (Posix)
+        version (TZEnvVar_Support)
         {
             scope(exit) clearTZEnvVar();
 
@@ -969,8 +975,7 @@ public:
         assert(LocalTime().tzToUTC(LocalTime().utcToTZ(0)) == 0);
         assert(LocalTime().utcToTZ(LocalTime().tzToUTC(0)) == 0);
 
-        version (CRuntime_WASI) {}
-        else version (Posix)
+        version (TZEnvVar_Support)
         {
             scope(exit) clearTZEnvVar();
 
@@ -1207,8 +1212,7 @@ public:
     {
         assert(UTC().utcToTZ(0) == 0);
 
-        version (CRuntime_WASI) {}
-        else version (Posix)
+        version (TZEnvVar_Support)
         {
             scope(exit) clearTZEnvVar();
 
@@ -1241,8 +1245,7 @@ public:
     {
         assert(UTC().tzToUTC(0) == 0);
 
-        version (CRuntime_WASI) {}
-        else version (Posix)
+        version (TZEnvVar_Support)
         {
             scope(exit) clearTZEnvVar();
 
@@ -2056,6 +2059,10 @@ public:
     else version (Solaris)
     {
         enum defaultTZDatabaseDir = "/usr/share/lib/zoneinfo/";
+    }
+    else version (Emscripten)
+    {
+        enum defaultTZDatabaseDir = "/usr/share/zoneinfo/";
     }
     else version (WASI)
     {
@@ -3346,8 +3353,7 @@ version (StdDdoc)
       +/
     void clearTZEnvVar() @safe nothrow;
 }
-else version (CRuntime_WASI) {}
-else version (Posix)
+else version (TZEnvVar_Support)
 {
     void setTZEnvVar(string tzDatabaseName) @trusted nothrow
     {

@@ -667,6 +667,10 @@ else version (OpenBSD) mixin entropyImpl!(
     SrcFunPair!(EntropySource.charDevURandom, getEntropyViaCharDevURandom),
     SrcFunPair!(EntropySource.charDevRandom, getEntropyViaCharDevRandom),
 );
+else version (Emscripten) mixin entropyImpl!(
+    EntropySource.getentropy,
+    SrcFunPair!(EntropySource.getentropy, getEntropyViaGetentropy),
+);
 else version (CRuntime_WASI) mixin entropyImpl!(
     EntropySource.arc4random,
     SrcFunPair!(EntropySource.arc4random, getEntropyViaARC4Random)
@@ -796,6 +800,8 @@ private
         version = SecureARC4Random;
     version (OpenBSD)
         version = SecureARC4Random;
+    version (Emscripten)
+        version = UseGetentropy;
     version (CRuntime_WASI)
         version = SecureARC4Random;
 
