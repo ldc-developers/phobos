@@ -41,46 +41,20 @@ immutable
     else                      Vendor vendor = Vendor.unknown;
 
 
-version (LDC)
-{
-    // LDC has its own release versioning scheme, separate from the
-    // DMD frontend version (__VERSION__). The "major.minor" string is
-    // generated at build time into "ldccompilerversion.txt"
-    // (see runtime/CMakeLists.txt) and string-imported here.
-    private uint parseLDCVersionNumber() @safe
+    /**
+     * The vendor specific version number, as in
+     * version_major.version_minor
+     */
+    version (LDC)
     {
-        enum ver = import("ldccompilerversion.txt");
-        uint major = 0;
-        uint minor = 0;
-        size_t i = 0;
-        while (i < ver.length && ver[i] >= '0' && ver[i] <= '9')
-            major = major * 10 + (ver[i++] - '0');
-        if (i < ver.length && ver[i] == '.')
-        {
-            i++;
-            while (i < ver.length && ver[i] >= '0' && ver[i] <= '9')
-                minor = minor * 10 + (ver[i++] - '0');
-        }
-        return major * 1000 + minor;
+        uint version_major = __LDC_VERSION__ / 1000;
+        uint version_minor = __LDC_VERSION__ % 1000;    /// ditto
     }
-    private enum _ldcVersionNumber = parseLDCVersionNumber();
-
-    /**
-     * The vendor specific version number, as in
-     * version_major.version_minor
-     */
-    uint version_major = _ldcVersionNumber / 1000;
-    uint version_minor = _ldcVersionNumber % 1000;    /// ditto
-}
-else
-{
-    /**
-     * The vendor specific version number, as in
-     * version_major.version_minor
-     */
-    uint version_major = __VERSION__ / 1000;
-    uint version_minor = __VERSION__ % 1000;    /// ditto
-}
+    else
+    {
+        uint version_major = __VERSION__ / 1000;
+        uint version_minor = __VERSION__ % 1000;    /// ditto
+    }
 
 
     /**
