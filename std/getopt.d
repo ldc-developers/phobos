@@ -295,7 +295,39 @@ int main(string[] args)
 }
 ---------
         )
+
+        $(LI If the callback takes two string arguments and a $(D size_t),
+        it behaves as the two string version, plus the index of the option
+        in the original argument array.
+
+---------
+int main(string[] args)
+{
+  size_t[] cs;
+  void myHandler(string option, string value, size_t idx)
+  {
+    // handle "-C file"
+    cs ~= idx;
+  }
+
+  string[] args = ["prog", "file1", "-C", "dir2", "file2", "-C", "dir3", "file3" ];
+
+  // a copy is required as getopt will remove elements from $I(args) when a
+  // match is found. The indices in cs are for the $I(argsCopy) array.
+  string[] argsCopy = args;
+
+  getopt(args, "C", &myHandler);
+
+  assert(cs == [2,5], to!string(cs));
+
+  // given the indices into the original args array allows to construct
+  // positional arguments
+  assert(argsCopy[cs[0] .. cs[0]+3] == [ "-C", "dir2", "file2" ]);
+  assert(argsCopy[cs[1] .. cs[1]+3] == [ "-C", "dir3", "file3" ]);
+}
+---------
     ))
+)
 )
 
 Options_with_multiple_names:
@@ -427,7 +459,8 @@ GetoptResult getopt(T...)(ref string[] args, T opts)
 
     GetOptException excep;
     void[][string] visitedLongOpts, visitedShortOpts;
-    getoptImpl(args, cfg, rslt, excep, visitedLongOpts, visitedShortOpts, opts);
+    size_t[] argsIdx = [ ];
+    getoptImpl(args, cfg, rslt, excep, visitedLongOpts, visitedShortOpts, argsIdx, opts);
 
     if (!rslt.helpWanted && excep !is null)
     {
@@ -590,13 +623,13 @@ private template optionValidator(A...)
                     }
                     else static if (isReceiver!(A[i]) && !isOptionStr!(A[i-1]))
                     {
-                        msg = optionValidatorErrorFormat("a receiver can not be preceeded by a receiver", i);
+                        msg = optionValidatorErrorFormat("a receiver can not be preceded by a receiver", i);
                         goto end;
                     }
                     else static if (i > 1 && isOptionStr!(A[i]) && isOptionStr!(A[i-1])
                         && isSomeString!(A[i-2]))
                     {
-                        msg = optionValidatorErrorFormat("a string can not be preceeded by two strings", i);
+                        msg = optionValidatorErrorFormat("a string can not be preceded by two strings", i);
                         goto end;
                     }
                 }
@@ -699,7 +732,8 @@ private auto getoptTo(R)(string option, string value,
 
 private void getoptImpl(T...)(ref string[] args, ref configuration cfg,
     ref GetoptResult rslt, ref GetOptException excep,
-    void[][string] visitedLongOpts, void[][string] visitedShortOpts, T opts)
+    void[][string] visitedLongOpts, void[][string] visitedShortOpts,
+    ref size_t[] argsIdx, T opts)
 {
     enum validationMessage = optionValidator!T;
     static assert(validationMessage == "", validationMessage);
@@ -714,7 +748,7 @@ private void getoptImpl(T...)(ref string[] args, ref configuration cfg,
             // it's a configuration flag, act on it
             setConfig(cfg, opts[0]);
             return getoptImpl(args, cfg, rslt, excep, visitedLongOpts,
-                visitedShortOpts, opts[1 .. $]);
+                visitedShortOpts, argsIdx, opts[1 .. $]);
         }
         else
         {
@@ -773,7 +807,7 @@ private void getoptImpl(T...)(ref string[] args, ref configuration cfg,
                 incremental = true;
             }
 
-            bool optWasHandled = handleOption(option, receiver, args, cfg, incremental);
+            bool optWasHandled = handleOption(option, receiver, args, cfg, incremental, argsIdx);
 
             if (cfg.required && !optWasHandled)
             {
@@ -783,7 +817,7 @@ private void getoptImpl(T...)(ref string[] args, ref configuration cfg,
             cfg.required = false;
 
             getoptImpl(args, cfg, rslt, excep, visitedLongOpts,
-                visitedShortOpts, opts[lowSliceIdx .. $]);
+                visitedShortOpts, argsIdx, opts[lowSliceIdx .. $]);
         }
     }
     else
@@ -828,15 +862,24 @@ private void getoptImpl(T...)(ref string[] args, ref configuration cfg,
 }
 
 private bool handleOption(R)(string option, R receiver, ref string[] args,
-    ref configuration cfg, bool incremental)
+    ref configuration cfg, bool incremental, ref size_t[] argsIdx)
 {
     import std.algorithm.iteration : map, splitter;
     import std.ascii : isAlpha;
     import std.conv : text, to;
     // Scan arguments looking for a match for this option
     bool ret = false;
+    size_t iOriginal;
     for (size_t i = 1; i < args.length; )
     {
+        iOriginal = i;
+        foreach (removed; argsIdx)
+        {
+            if (removed <= iOriginal)
+            {
+                ++iOriginal;
+            }
+        }
         auto a = args[i];
         if (endOfOptions.length && a == endOfOptions) break;
         if (cfg.stopOnFirstNonOption && (!a.length || a[0] != optionChar))
@@ -880,6 +923,10 @@ private bool handleOption(R)(string option, R receiver, ref string[] args,
         // (and potentially args[i + 1] too, but that comes later)
         args = args[0 .. i] ~ args[i + 1 .. $];
 
+        // eating the option marker must be remembered as well
+        argsIdx ~= iOriginal;
+        ++iOriginal;
+
         static if (is(typeof(*receiver)))
             alias Target = typeof(*receiver);
         else
@@ -906,7 +953,7 @@ private bool handleOption(R)(string option, R receiver, ref string[] args,
             enum isCallbackWithLessThanTwoParameters =
                 (is(R == delegate) || is(Target == function)) &&
                 !is(typeof(receiver("", "")));
-            if (!isCallbackWithLessThanTwoParameters && !(val.length) && !incremental)
+            if (!isCallbackWithLessThanTwoParameters && val is null && !incremental)
             {
                 // Eat the next argument too.  Check to make sure there's one
                 // to be eaten first, though.
@@ -914,6 +961,7 @@ private bool handleOption(R)(string option, R receiver, ref string[] args,
                         "Missing value for argument " ~ a ~ ".");
                 val = args[i];
                 args = args[0 .. i] ~ args[i + 1 .. $];
+                argsIdx ~= iOriginal;
             }
             static if (is(Target == enum) ||
                     is(Target == string))
@@ -940,7 +988,19 @@ private bool handleOption(R)(string option, R receiver, ref string[] args,
             else static if (is(R == delegate) ||
                     is(Target == function))
             {
-                static if (is(typeof(receiver("", "")) : void))
+                static if (is(typeof(receiver("", "", size_t.init)) : void))
+                {
+                    // option with argument, and index
+                    // Eat the next argument too.  Check to make sure there's one
+                    // to be eaten first, though.
+                    enforce!GetOptException(i < args.length,
+                            "Missing value for argument " ~ a ~ ".");
+                    val = args[i];
+                    args = args[0 .. i] ~ args[i + 1 .. $];
+                    argsIdx ~= iOriginal;
+                    receiver(option, val, iOriginal - 1);
+                }
+                else static if (is(typeof(receiver("", "")) : void))
                 {
                     // option with argument
                     receiver(option, val);
@@ -1218,7 +1278,7 @@ private bool optMatch(string arg, scope string optPattern, ref string value,
         if (!isLong && !cfg.bundling)
         {
             // argument looks like -ovalue and there's no bundling
-            value = arg[1 .. $];
+            value = arg.length > 1 ? arg[1 .. $] : null;
             arg = arg[0 .. 1];
         }
         else
@@ -1441,7 +1501,7 @@ private void setConfig(ref configuration cfg, config option) @safe pure nothrow 
     static void myStaticHandler3(string option, string value) { throw new MyEx(option, value); }
     args = ["program.name", "--verbose", "2"];
     try { getopt(args, "verbose", &myStaticHandler3); assert(0); }
-    catch (MyEx ex) { assert(ex.option == "verbose" && ex.value == "2"); }
+    catch (MyEx ex) { assert(ex.option == "verbose" && ex.value == "2", "'" ~ ex.option ~ " " ~ ex.value ~ "'"); }
 
     // check that GetOptException is thrown if the value is missing
     args = ["program.name", "--verbose"];
@@ -2027,12 +2087,12 @@ void defaultGetoptFormatter(Output)(Output output, string text, Option[] opt, st
     import std.conv : ConvException;
     import std.string : indexOf;
 
-    enum UniqueIdentifer {
+    enum UniqueIdentifier {
         a,
         b
     }
 
-    UniqueIdentifer a;
+    UniqueIdentifier a;
 
     auto args = ["prog", "--foo", "HELLO"];
     try
@@ -2045,7 +2105,7 @@ void defaultGetoptFormatter(Output)(Output output, string text, Option[] opt, st
     {
         string str = () @trusted { return e.toString(); }();
         assert(str.indexOf("HELLO") != -1);
-        assert(str.indexOf("UniqueIdentifer") != -1);
+        assert(str.indexOf("UniqueIdentifier") != -1);
         assert(str.indexOf("foo") != -1);
     }
 }
@@ -2075,4 +2135,51 @@ void defaultGetoptFormatter(Output)(Output output, string text, Option[] opt, st
     args = ["prog", "--foo", "1337"];
     getopt(args, "foo|f", &a);
     assert(a == 1337);
+}
+
+// https://github.com/dlang/phobos/issues/10791
+@safe unittest
+{
+    string arg1, arg2;
+
+    auto args = ["prog", "--arg1=", "--arg2=p2"];
+    getopt(args, "arg1", &arg1, "arg2", &arg2);
+    assert(arg1 == "", "arg1 should be empty string, got: " ~ arg1);
+    assert(arg2 == "p2");
+}
+
+@safe unittest
+{
+    import std.conv : to;
+
+    auto args = ["prog", "--foo", "HELLO"];
+    void myHandler(string option, string value, size_t idx)
+    {
+        assert(option == "foo|f", option);
+        assert(idx == 1, to!string(idx));
+        assert(value == "HELLO", "'" ~ value ~ "'");
+    }
+    getopt(args, "foo|f", &myHandler);
+}
+
+@safe unittest
+{
+    import std.conv : to;
+
+    size_t[] cs;
+    void myHandler(string option, string value, size_t idx)
+    {
+        cs ~= idx;
+    }
+
+    string[] args = ["prog", "file1", "-C", "dir2", "file2", "-C", "dir3", "file3" ];
+    string[] argsCopy = args;
+    getopt(args, "C", &myHandler);
+
+    assert(cs == [2,5], to!string(cs));
+
+    // given the indices into the original args array allows to construct
+    // positional arguments
+    assert(argsCopy[cs[0] .. cs[0]+3] == [ "-C", "dir2", "file2" ]);
+    assert(argsCopy[cs[1] .. cs[1]+3] == [ "-C", "dir3", "file3" ]);
 }

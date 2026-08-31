@@ -179,7 +179,7 @@ struct CodeGen
     uint counterDepth = 0;         // current depth of nested counted repetitions
     CodepointSet[] charsets;       // sets for char classes
     const(CharMatcher)[] matchers; // matchers for char classes
-    uint[] backrefed;              // bitarray for groups refered by backref
+    uint[] backrefed;              // bitarray for groups referred by backref
     uint ngroup;                   // final number of groups (of all patterns)
 
     void start(uint length)
@@ -977,13 +977,15 @@ if (isForwardRange!R && is(ElementType!R : dchar))
             enforce(nref < maxBackref, "Backref to unseen group");
             enforce(!g.isOpenGroup(nref), "Backref to open group");
             uint localLimit = maxBackref - g.groupStack.top;
+            immutable IR backrefOp = (re_flags & RegexOption.casefold)
+                ? IR.BackrefI : IR.Backref;
             if (nref >= localLimit)
             {
-                g.put(Bytecode(IR.Backref, nref-localLimit));
+                g.put(Bytecode(backrefOp, nref-localLimit));
                 g.ir[$-1].setLocalRef();
             }
             else
-                g.put(Bytecode(IR.Backref, nref));
+                g.put(Bytecode(backrefOp, nref));
             g.markBackref(nref);
             break;
         default:
@@ -1154,7 +1156,10 @@ void optimize(Char)(ref Regex!Char zis)
                 case Char:
                     set.add(ir[i].data, ir[i].data+1);
                     goto default;
-                //TODO: OrChar
+                case OrChar://assumes IRL!(OrChar) == 1
+                    foreach (k; 0 .. ir[i].sequence)
+                        set.add(ir[i+k].data, ir[i+k].data+1);
+                    goto default;
                 case Trie, CodepointSet:
                     set = zis.charsets[ir[i].data];
                     goto default;

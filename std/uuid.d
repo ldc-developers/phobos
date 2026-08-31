@@ -606,6 +606,19 @@ public struct UUID
             return ret;
         }
 
+        /// Read UUID v7 Method 3 timestamp
+        @system unittest
+        {
+            import core.time;
+            import std.datetime;
+
+            const u = UUID("019913ce-f124-7835-96c7-a2df691caa98");
+            const ts = u.v7Timestamp_method3;
+            const toCmp = SysTime(DateTime(2025, 9, 4, 8, 19, 13), dur!"hnsecs"(3165129), UTC());
+
+            assert(ts == toCmp, ts.toString~" != "~toCmp.toString);
+        }
+
         /**
          * RFC 4122 defines different internal data layouts for UUIDs.
          * Returns the format used by this UUID.
@@ -1521,6 +1534,24 @@ class MonotonicUUIDsFactoryImpl(bool autostartDisabledForTesting)
 
 @system unittest
 {
+    import std.datetime.systime : Clock;
+    import core.time : abs, Duration, seconds;
+
+    auto f = new shared MonotonicUUIDsFactory;
+
+    UUID[10] monotonic;
+
+    foreach (ref u; monotonic)
+    {
+        u = f.createUUIDv7_method3;
+
+        const Duration d = Clock.currTime - u.v7Timestamp_method3;
+        assert(d.abs < 1.seconds);
+    }
+}
+
+@system unittest
+{
     import std.conv : to;
     import std.datetime;
 
@@ -2053,7 +2084,7 @@ public class UUIDParsingException : Exception
         this.input = input;
         this.position = pos;
         this.reason = why;
-        string message = format("An error occured in the UUID parser: %s\n" ~
+        string message = format("An error occurred in the UUID parser: %s\n" ~
           " * Input:\t'%s'\n * Position:\t%s", msg, replace(replace(input,
           "\r", "\\r"), "\n", "\\n"), pos);
         super(message, file, line, next);

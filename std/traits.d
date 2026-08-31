@@ -3732,28 +3732,19 @@ template hasElaborateAssign(S)
     static assert( hasElaborateAssign!SS9);
 }
 
-version (StdDdoc)
-{
-    /**
-       True if `S` or any type directly embedded in the representation
-       of `S` defines an elaborate destructor. Elaborate destructors
-       are introduced by defining `~this()` for a $(D
-       struct).
+/**
+   True if `S` or any type directly embedded in the representation
+   of `S` defines an elaborate destructor. Elaborate destructors
+   are introduced by defining `~this()` for a $(D
+   struct).
 
-       Classes and unions never have elaborate destructors, even
-       though classes may define `~this()`.
-    */
-    template hasElaborateDestructor(S)
-    {
-        import core.internal.traits : hasElabDest = hasElaborateDestructor;
-        alias hasElaborateDestructor = hasElabDest!(S);
-    }
-}
-else
-{
-    import core.internal.traits : hasElabDest = hasElaborateDestructor;
-    alias hasElaborateDestructor = hasElabDest;
-}
+   Classes and unions never have elaborate destructors, even
+   though classes may define `~this()`.
+
+   Note: This just wraps $(LINK2 $(ROOT_DIR)spec/traits.html#needsDestruction,
+   `__traits(needsDestruction, S)`).
+*/
+enum hasElaborateDestructor(S) = __traits(needsDestruction, S);
 
 ///
 @safe unittest
@@ -5541,7 +5532,7 @@ if (is(F == function) && is(G == function) ||
          */
         template checkSTC()
         {
-            // Note the order of arguments.  The convertion order Lwr -> Upr is
+            // Note the order of arguments.  The conversion order Lwr -> Upr is
             // correct since Upr should be semantically 'narrower' than Lwr.
             enum ok = isStorageClassImplicitlyConvertible!(Lwr, Upr);
         }
@@ -5566,7 +5557,7 @@ if (is(F == function) && is(G == function) ||
                 (!!(uprAtts & safety    )  >= !!(lwrAtts & safety    )) ;
         }
         /*
-         * Check for return type: usual implicit convertion.
+         * Check for return type: usual implicit conversion.
          */
         template checkReturnType()
         {
@@ -7889,7 +7880,7 @@ else
     Removes `shared` qualifier, if any, from type `T`.
 
     Note that while `immutable` is implicitly `shared`, it is unaffected by
-    Unshared. Only explict `shared` is removed.
+    Unshared. Only explicit `shared` is removed.
   +/
 template Unshared(T)
 {

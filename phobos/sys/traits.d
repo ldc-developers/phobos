@@ -2652,7 +2652,7 @@ template isEqual(alias lhs)
     static assert(!__traits(compiles, __traits(identifier, arr[0])));
 
     // Similarly, once an enum member from the AliasSeq is assigned to a
-    // variable, __traits(identifer, ...) operates on the variable, not the
+    // variable, __traits(identifier, ...) operates on the variable, not the
     // symbol from the AliasSeq or the value of the variable.
     auto var = uniqueMembers[0];
     static assert(__traits(identifier, var) == "var");
@@ -2725,7 +2725,7 @@ template isSameSymbol(alias lhs)
     static assert(!isSameSymbol!(double, const double));
     static assert(!isSameSymbol!(double, int));
     static assert( isSameSymbol!(Object, Object));
-    static assert( isSameSymbol!(Object, const Object));
+    static assert(!isSameSymbol!(Object, const Object));
 
     static assert(!isSameSymbol!(i, int));
     static assert( isSameSymbol!(typeof(i), int));
@@ -5448,8 +5448,7 @@ template hasComplexCopying(T)
   +/
 template hasComplexDestruction(T)
 {
-    import core.internal.traits : hasElaborateDestructor;
-    alias hasComplexDestruction = hasElaborateDestructor!T;
+    enum hasComplexDestruction = __traits(needsDestruction, T);
 }
 
 ///
@@ -5726,13 +5725,13 @@ else
     alias testWithQualifiers = assertWithQualifiers!hasIndirections;
 
     foreach (T; AliasSeq!(bool, byte, ubyte, short, ushort, int, uint, long, ulong,
-                          float, double, real, char, wchar, dchar, int function(string), void))
+                          float, double, real, char, wchar, dchar, int function(string)))
     {
         mixin testWithQualifiers!(T, false);
         mixin testWithQualifiers!(T*, true);
         mixin testWithQualifiers!(T[], true);
 
-        mixin testWithQualifiers!(T[42], is(T == void));
+        mixin testWithQualifiers!(T[42], false);
         mixin testWithQualifiers!(T[0], false);
 
         mixin testWithQualifiers!(T*[42], true);
@@ -5742,7 +5741,7 @@ else
         mixin testWithQualifiers!(T[][0], false);
     }
 
-    foreach (T; AliasSeq!(int[int], int delegate(string)))
+    foreach (T; AliasSeq!(int[int], int delegate(string), void))
     {
         mixin testWithQualifiers!(T, true);
         mixin testWithQualifiers!(T*, true);

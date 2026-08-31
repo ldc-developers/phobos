@@ -634,13 +634,12 @@ if (isInputRange!Values && isInputRange!Keys)
             static if (is(typeof(() nothrow
             {
                 import std.range : ElementType;
-                import std.traits : hasElaborateDestructor;
                 alias KeyElement = ElementType!Keys;
-                static if (hasElaborateDestructor!KeyElement)
+                static if (__traits(needsDestruction, KeyElement))
                     KeyElement.init.__xdtor();
 
                 alias ValueElement = ElementType!Values;
-                static if (hasElaborateDestructor!ValueElement)
+                static if (__traits(needsDestruction, ValueElement))
                     ValueElement.init.__xdtor();
             })))
             {
@@ -672,13 +671,12 @@ if (isInputRange!Values && isInputRange!Keys)
             static if (is(typeof(() @safe
             {
                 import std.range : ElementType;
-                import std.traits : hasElaborateDestructor;
                 alias KeyElement = ElementType!Keys;
-                static if (hasElaborateDestructor!KeyElement)
+                static if (__traits(needsDestruction, KeyElement))
                     KeyElement.init.__xdtor();
 
                 alias ValueElement = ElementType!Values;
-                static if (hasElaborateDestructor!ValueElement)
+                static if (__traits(needsDestruction, ValueElement))
                     ValueElement.init.__xdtor();
 
                 aa[key] = values.front;
@@ -1137,15 +1135,7 @@ private auto arrayAllocImpl(bool minimallyInitialized, T, I...)(I sizes) nothrow
               to the size parameter.
             +/
             enum isShared = is (E == shared);
-            version (D_ProfileGC)
-            {
-                // FIXME: file, line, function should be propagated from the
-                // caller, not here.
-                ret = _d_newarrayUTrace!E(size, isShared,
-                    __FILE__, __LINE__, __FUNCTION__);
-            }
-            else
-                ret = _d_newarrayU!E(size, isShared);
+            ret = _d_newarrayU!E(size, isShared);
             static if (minimallyInitialized && hasIndirections!E)
                 // _d_newarrayU would have asserted if the multiplication below
                 // had overflowed, so we don't have to check it again.
@@ -2366,7 +2356,7 @@ if (isInputRange!RoR &&
                     emplaceRef(result[len++], e);
             }
             assert(len == result.length, format!
-                    "len %s must equal result.lenght %s"(len, result.length));
+                    "len %s must equal result.length %s"(len, result.length));
             return (() @trusted => cast(RetType) result)();
         }
     }

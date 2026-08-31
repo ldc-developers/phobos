@@ -680,7 +680,7 @@ switchStmtTupAssign:
                         static if (is(A == U[n], U, size_t n))
                             auto p = cast(A*) (new U[n]).ptr;
                         else
-                            // object will be intialized later. Using malloc in case `this()` is disabled
+                            // object will be initialized later. Using malloc in case `this()` is disabled
                             A* p = cast(A*) GC.malloc(A.sizeof, 0, typeid(A));
                         // Emplace will run the postblit of `A` us, no need to do it manually, then
                         copyEmplace(*zis, *p);
@@ -697,7 +697,7 @@ switchStmtTupAssign:
             }
 
         case OpID.destruct:
-            static if (hasElaborateDestructor!A)
+            static if (__traits(needsDestruction, A))
             {
                 zis.__xdtor();
             }
@@ -790,7 +790,7 @@ public:
                 static if (is(T == U[n], U, size_t n))
                     T* p = cast(T*) (new U[n]).ptr;
                 else
-                    // object will be intialized later. Using malloc in case `this()` is disabled
+                    // object will be initialized later. Using malloc in case `this()` is disabled
                     T* p = cast(T*) GC.malloc(T.sizeof, 0, typeid(T));
                 copyEmplace(rhs, *p);
                 *(cast(T**) &store) = p;
@@ -3133,10 +3133,10 @@ if (isAlgebraic!VariantType && Handler.length > 0)
     static assert( hasElaborateCopyConstructor!(Algebraic!S));
     static assert( hasElaborateCopyConstructor!(Algebraic!(bool, S)));
 
-    static assert( hasElaborateDestructor!(Variant));
-    static assert(!hasElaborateDestructor!(Algebraic!bool));
-    static assert( hasElaborateDestructor!(Algebraic!S));
-    static assert( hasElaborateDestructor!(Algebraic!(bool, S)));
+    static assert( __traits(needsDestruction, Variant));
+    static assert(!__traits(needsDestruction, Algebraic!bool));
+    static assert( __traits(needsDestruction, Algebraic!S));
+    static assert( __traits(needsDestruction, Algebraic!(bool, S)));
 
     import std.array;
     alias Value = Algebraic!bool;

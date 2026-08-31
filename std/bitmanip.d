@@ -110,23 +110,23 @@ private template createAccessors(
         {
             enum createAccessors =
             // getter
-                "@property bool " ~ name ~ "() @safe pure nothrow @nogc const { return "
+                "@property bool " ~ name ~ "() scope @safe pure nothrow @nogc const { return "
                 ~"("~store~" & "~myToString(maskAllElse)~") != 0;}\n"
             // setter
-                ~"@property void " ~ name ~ "(bool v) @safe pure nothrow @nogc { "
+                ~"@property void " ~ name ~ "(bool v) scope @safe pure nothrow @nogc { "
                 ~"if (v) "~store~" |= "~myToString(maskAllElse)~";"
                 ~"else "~store~" &= cast(typeof("~store~"))(-1-cast(typeof("~store~"))"~myToString(maskAllElse)~");}\n";
         }
         else
         {
             // getter
-            enum createAccessors = "@property "~T.stringof~" "~name~"() @safe pure nothrow @nogc const {"
+            enum createAccessors = "@property "~T.stringof~" "~name~"() scope @safe pure nothrow @nogc const {"
                 ~ "auto result = cast("~T.stringof~") (" ~ store ~ " >>" ~ myToString(offset) ~ ");"
                 ~ "result <<= " ~ myToString(SignShift) ~ ";"
                 ~ "result " ~ RightShiftOp ~ myToString(SignShift) ~ ";"
                 ~ " return result;}\n"
             // setter
-                ~"@property void "~name~"("~T.stringof~" v) @safe pure nothrow @nogc { "
+                ~"@property void "~name~"("~T.stringof~" v) scope @safe pure nothrow @nogc { "
                 ~"assert(v >= "~name~`_min, "Value is smaller than the minimum value of bitfield '`~name~`'"); `
                 ~"assert(v <= "~name~`_max, "Value is greater than the maximum value of bitfield '`~name~`'"); `
                 ~store~" = cast(typeof("~store~"))"
@@ -199,18 +199,18 @@ private ulong getBitsForAlign(ulong a)
 private template createReferenceAccessor(string store, T, ulong bits, string name)
 {
     enum storage = "private void* " ~ store ~ "_ptr;\n";
-    enum storage_accessor = "@property ref size_t " ~ store ~ "() return @trusted pure nothrow @nogc const { "
+    enum storage_accessor = "@property ref size_t " ~ store ~ "() scope return @trusted pure nothrow @nogc const { "
         ~ "return *cast(size_t*) &" ~ store ~ "_ptr;}\n"
-        ~ "@property void " ~ store ~ "(size_t v) @trusted pure nothrow @nogc { "
+        ~ "@property void " ~ store ~ "(size_t v) scope @trusted pure nothrow @nogc { "
         ~ "" ~ store ~ "_ptr = cast(void*) v;}\n";
 
     enum mask = (1UL << bits) - 1;
     // getter
-    enum ref_accessor = "@property "~T.stringof~" "~name~"() @trusted pure nothrow @nogc const { auto result = "
+    enum ref_accessor = "@property "~T.stringof~" "~name~"() scope @trusted pure nothrow @nogc const { auto result = "
         ~ "("~store~" & "~myToString(~mask)~"); "
         ~ "return cast("~T.stringof~") cast(void*) result;}\n"
     // setter
-        ~"@property void "~name~"("~T.stringof~" v) @trusted pure nothrow @nogc { "
+        ~"@property void "~name~"("~T.stringof~" v) scope @trusted pure nothrow @nogc { "
         ~"assert(((cast(typeof("~store~")) cast(void*) v) & "~myToString(mask)
         ~`) == 0, "Value not properly aligned for '`~name~`'"); `
         ~store~" = cast(typeof("~store~"))"
@@ -776,6 +776,31 @@ if (is(T == class))
     static assert(!__traits(compiles, bar(s)));
 }
 
+// https://github.com/dlang/phobos/issues/9840
+@safe unittest
+{
+    struct S
+    {
+        mixin(taggedPointer!(
+            int*, "ptr",
+            bool, "flag", 1
+        ));
+    }
+
+    void foo(scope ref S s) @safe
+    {
+        // These should compile with -preview=dip1000
+        assert(s.ptr is null);
+        s.ptr = null;
+        assert(!s.flag);
+        s.flag = true;
+        assert(s.flag);
+    }
+
+    S s;
+    foo(s);
+}
+
 private struct FloatingPointRepresentation(T)
 {
     static if (is(T == float))
@@ -1075,7 +1100,7 @@ public:
     This constructor is the inverse of $(LREF opCast).
 
     Params:
-        v = Source array. `v.length` must be a multple of `size_t.sizeof`.
+        v = Source array. `v.length` must be a multiple of `size_t.sizeof`.
         numbits = Number of bits to be mapped from the source array, i.e.
                   length of the created `BitArray`.
     */
@@ -1176,10 +1201,10 @@ public:
     }
 
     /**********************************************
-     * Sets the amount of bits in the `BitArray`.
+     * Sets the number of bits in the `BitArray`.
      * $(RED Warning: increasing length may overwrite bits in
      * the final word of the current underlying data regardless
-     * of whether it is shared between BitArray objects. i.e. D
+     * of whether it is shared between `BitArray` objects. i.e. D
      * dynamic array extension semantics are not followed.)
      */
     @property size_t length(size_t newlen) pure nothrow @system
@@ -1744,7 +1769,7 @@ public:
     /***************************************
      * Supports comparison operators for `BitArray`.
      */
-    int opCmp(BitArray a2) const @nogc pure nothrow
+    int opCmp(const BitArray a2) const @nogc pure nothrow
     {
         const lesser = this.length < a2.length ? &this : &a2;
         immutable fullWords = lesser.fullWords;
@@ -1791,8 +1816,8 @@ public:
         bool[] bf = [1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1];
         bool[] bg = [1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0];
 
-        auto a = BitArray(ba);
-        auto b = BitArray(bb);
+        const a = BitArray(ba);
+        const b = BitArray(bb);
         auto c = BitArray(bc);
         auto d = BitArray(bd);
         auto e = BitArray(be);
@@ -2214,7 +2239,7 @@ public:
     /***************************************
      * ditto
      */
-    BitArray opOpAssign(string op)(BitArray b) pure nothrow return scope
+    BitArray opOpAssign(string op)(const BitArray b) pure nothrow return scope
     if (op == "~")
     {
         auto istart = _len;
@@ -2231,7 +2256,7 @@ public:
         bool[] bb = [0,1,0];
 
         auto a = BitArray(ba);
-        auto b = BitArray(bb);
+        const b = BitArray(bb);
         BitArray c;
 
         c = (a ~= b);
@@ -2241,7 +2266,6 @@ public:
         assert(a[2] == 0);
         assert(a[3] == 1);
         assert(a[4] == 0);
-
         assert(c == a);
     }
 
@@ -2273,12 +2297,10 @@ public:
     }
 
     /** ditto */
-    BitArray opBinary(string op)(BitArray b) const pure nothrow
+    BitArray opBinary(string op)(const BitArray b) const pure nothrow
     if (op == "~")
     {
-        BitArray r;
-
-        r = this.dup;
+        BitArray r = this.dup;
         r ~= b;
         return r;
     }
@@ -2289,8 +2311,8 @@ public:
         bool[] ba = [1,0];
         bool[] bb = [0,1,0];
 
-        auto a = BitArray(ba);
-        auto b = BitArray(bb);
+        const a = BitArray(ba);
+        const b = BitArray(bb);
         BitArray c;
 
         c = (a ~ b);
@@ -3377,7 +3399,7 @@ if (canSwapEndianness!T &&
     isForwardRange!R &&
     is(ElementType!R : const ubyte))
 {
-    static if (hasSlicing!R)
+    static if (hasSlicing!R && is(typeof(R.init[0 .. 0]) : const(ubyte)[]))
         const ubyte[T.sizeof] bytes = range[0 .. T.sizeof];
     else
     {
@@ -3401,7 +3423,7 @@ if (canSwapEndianness!T &&
 /++ Ditto +/
 T peek(T, Endian endianness = Endian.bigEndian, R)(R range, size_t index)
 if (canSwapEndianness!T &&
-    isForwardRange!R &&
+    isRandomAccessRange!R &&
     hasSlicing!R &&
     is(ElementType!R : const ubyte))
 {
@@ -3411,7 +3433,7 @@ if (canSwapEndianness!T &&
 /++ Ditto +/
 T peek(T, Endian endianness = Endian.bigEndian, R)(R range, size_t* index)
 if (canSwapEndianness!T &&
-    isForwardRange!R &&
+    isRandomAccessRange!R &&
     hasSlicing!R &&
     is(ElementType!R : const ubyte))
 {
@@ -3419,7 +3441,14 @@ if (canSwapEndianness!T &&
 
     immutable begin = *index;
     immutable end = begin + T.sizeof;
-    const ubyte[T.sizeof] bytes = range[begin .. end];
+    static if (hasSlicing!R && is(typeof(R.init[0 .. 0]) : const(ubyte)[]))
+        const ubyte[T.sizeof] bytes = range[begin .. end];
+    else
+    {
+        ubyte[T.sizeof] bytes = void;
+        foreach (i; 0 .. T.sizeof)
+            bytes[i] = range[begin + i];
+    }
     *index = end;
 
     static if (endianness == Endian.bigEndian)
@@ -3660,6 +3689,116 @@ if (canSwapEndianness!T &&
         }
 
         static assert(!__traits(compiles, buffer.peek!Real()));
+    }
+}
+
+// https://github.com/dlang/phobos/issues/11027
+@safe unittest
+{
+    import std.meta : AliasSeq;
+
+    // Classes are used just to make sure that any uses of save are done
+    // correctly and that implicit saves are not accidentally relied upon.
+    static class IRange
+    {
+        @property bool empty() @safe const { return _arr.empty; }
+        @property ubyte front() @safe const { return _arr[0]; }
+        void popFront() @safe { _arr = _arr[1 .. $]; }
+        this(ubyte[] arr) @safe { _arr = arr; }
+        ubyte[] _arr;
+    }
+    static assert(isInputRange!IRange);
+    static assert(!isForwardRange!IRange);
+    static assert(!hasSlicing!IRange);
+
+    static class FRange
+    {
+        @property bool empty() @safe const { return _arr.empty; }
+        @property ubyte front() @safe const { return _arr[0]; }
+        void popFront() @safe { _arr = _arr[1 .. $]; }
+        auto save() @safe { return new typeof(this)(_arr); }
+        this(ubyte[] arr) @safe { _arr = arr; }
+        ubyte[] _arr;
+    }
+    static assert(isForwardRange!FRange);
+    static assert(!isRandomAccessRange!FRange);
+    static assert(!hasSlicing!FRange);
+
+    static class FSRange
+    {
+        @property bool empty() @safe const { return _arr.empty; }
+        @property ubyte front() @safe const { return _arr[0]; }
+        void popFront() @safe { _arr = _arr[1 .. $]; }
+        auto save() @safe { return new typeof(this)(_arr); }
+        @property size_t length() @safe const { return _arr.length; }
+        auto opSlice(size_t i, size_t j) @safe { return new FSRange(_arr[i .. j]); }
+        this(ubyte[] arr) @safe { _arr = arr; }
+        ubyte[] _arr;
+    }
+    static assert(isForwardRange!FSRange);
+    static assert(!isRandomAccessRange!FSRange);
+    static assert(hasSlicing!FSRange);
+
+    static class RARange
+    {
+        @property bool empty() @safe const { return _arr.empty; }
+        @property ubyte front() @safe const { return _arr[0]; }
+        void popFront() @safe { _arr = _arr[1 .. $]; }
+        auto save() @safe { return new typeof(this)(_arr); }
+        @property ubyte back() @safe const { return _arr[$ - 1]; }
+        void popBack() @safe { _arr = _arr[0 .. $ - 1]; }
+        @property size_t length() @safe const { return _arr.length; }
+        ubyte opIndex(size_t i) @safe const { return _arr[i]; }
+        auto opSlice(size_t i, size_t j) @safe { return new RARange(_arr[i .. j]); }
+        this(ubyte[] arr) @safe { _arr = arr; }
+        ubyte[] _arr;
+    }
+    static assert(isRandomAccessRange!RARange);
+    static assert(hasSlicing!RARange);
+
+    foreach (R; AliasSeq!(FRange, FSRange, RARange))
+    {
+        auto range = new RARange([1, 5, 22, 9, 44, 255, 8]);
+        assert(range.peek!uint() == 17110537);
+        assert(range.peek!ushort() == 261);
+        assert(range.peek!ubyte() == 1);
+
+        assert(range.peek!uint(2) == 369700095);
+        assert(range.peek!ushort(2) == 5641);
+        assert(range.peek!ubyte(2) == 22);
+
+        size_t index = 0;
+        assert(range.peek!ushort(&index) == 261);
+        assert(index == 2);
+
+        assert(range.peek!uint(&index) == 369700095);
+        assert(index == 6);
+
+        assert(range.peek!ubyte(&index) == 8);
+        assert(index == 7);
+    }
+
+    // Not for the listed bug, but we might as well use the same test ranges
+    // to verify that read works correctly under the same circumstances.
+    foreach (R; AliasSeq!(IRange, FRange, FSRange, RARange))
+    {
+        auto range = new R([1, 5, 22, 9, 44, 255, 8]);
+        static if (hasLength!R)
+            assert(range.length == 7);
+        assert(!range.empty);
+
+        assert(range.read!ushort() == 261);
+        static if (hasLength!R)
+            assert(range.length == 5);
+        assert(!range.empty);
+
+        assert(range.read!uint() == 369700095);
+        static if (hasLength!R)
+            assert(range.length == 1);
+        assert(!range.empty);
+
+        assert(range.read!ubyte() == 8);
+        assert(range.empty);
     }
 }
 
@@ -3931,8 +4070,9 @@ if (canSwapEndianness!T && isInputRange!R && is(ElementType!R : const ubyte))
   +/
 void write(T, Endian endianness = Endian.bigEndian, R)(R range, const T value, size_t index)
 if (canSwapEndianness!T &&
-    isForwardRange!R &&
+    isRandomAccessRange!R &&
     hasSlicing!R &&
+    hasAssignableElements!R &&
     is(ElementType!R : ubyte))
 {
     write!(T, endianness)(range, value, &index);
@@ -3941,8 +4081,9 @@ if (canSwapEndianness!T &&
 /++ Ditto +/
 void write(T, Endian endianness = Endian.bigEndian, R)(R range, const T value, size_t* index)
 if (canSwapEndianness!T &&
-    isForwardRange!R &&
+    isRandomAccessRange!R &&
     hasSlicing!R &&
+    hasAssignableElements!R &&
     is(ElementType!R : ubyte))
 {
     assert(index, "index must not point to null");
@@ -3955,7 +4096,14 @@ if (canSwapEndianness!T &&
     immutable begin = *index;
     immutable end = begin + T.sizeof;
     *index = end;
-    range[begin .. end] = bytes[0 .. T.sizeof];
+
+    static if (is(T == U[], U))
+        range[begin .. end] = bytes[0 .. T.sizeof];
+    else
+    {
+        foreach (i; 0 .. T.sizeof)
+            range[begin + i] = bytes[i];
+    }
 }
 
 ///
@@ -4267,6 +4415,63 @@ if (canSwapEndianness!T &&
     }
 
     static assert(!__traits(compiles, buffer.write!Real(Real.one)));
+}
+
+// https://github.com/dlang/phobos/issues/11028
+@safe unittest
+{
+    import std.algorithm.comparison : equal;
+    import std.meta : AliasSeq;
+
+    // A class is used just to make sure that any uses of save are done
+    // correctly and that implicit saves are not accidentally relied upon.
+    static class RARange
+    {
+        @property bool empty() @safe const { return _arr.empty; }
+        @property ubyte front() @safe const { return _arr[0]; }
+        @property void front(ubyte value) @safe { _arr[0] = value; }
+        void popFront() @safe { _arr = _arr[1 .. $]; }
+        auto save() @safe { return new typeof(this)(_arr); }
+        @property ubyte back() @safe const { return _arr[$ - 1]; }
+        @property void back(ubyte value) @safe { _arr[$ - 1] = value; }
+        void popBack() @safe { _arr = _arr[0 .. $ - 1]; }
+        @property size_t length() @safe const { return _arr.length; }
+        ubyte opIndex(size_t i) @safe const { return _arr[i]; }
+        void opIndexAssign(ubyte value, size_t i) @safe { _arr[i] = value; }
+        auto opSlice(size_t i, size_t j) @safe { return new RARange(_arr[i .. j]); }
+        this(ubyte[] arr) @safe { _arr = arr; }
+        ubyte[] _arr;
+    }
+    static assert(isRandomAccessRange!RARange);
+    static assert(hasSlicing!RARange);
+    static assert(hasAssignableElements!RARange);
+
+    {
+        auto range = new RARange([0, 0, 0, 0, 0, 0, 0, 0]);
+        range.write!uint(29110231u, 0);
+        assert(equal(range.save, [1, 188, 47, 215, 0, 0, 0, 0]));
+
+        range.write!ushort(927, 0);
+        assert(equal(range.save, [3, 159, 47, 215, 0, 0, 0, 0]));
+
+        range.write!ubyte(42, 0);
+        assert(equal(range.save, [42, 159, 47, 215, 0, 0, 0, 0]));
+    }
+    {
+        auto range = new RARange([0, 0, 0, 0, 0, 0, 0, 0]);
+        size_t index = 0;
+        range.write!ushort(261, &index);
+        assert(equal(range.save, [1, 5, 0, 0, 0, 0, 0, 0]));
+        assert(index == 2);
+
+        range.write!uint(369700095u, &index);
+        assert(equal(range.save, [1, 5, 22, 9, 44, 255, 0, 0]));
+        assert(index == 6);
+
+        range.write!ubyte(8, &index);
+        assert(equal(range.save, [1, 5, 22, 9, 44, 255, 8, 0]));
+        assert(index == 7);
+    }
 }
 
 

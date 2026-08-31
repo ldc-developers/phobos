@@ -345,6 +345,7 @@ public:
             else version (linux)         enum utcZone = "UTC";
             else version (Darwin)        enum utcZone = "UTC";
             else version (Solaris)       enum utcZone = "UTC";
+            else version (Hurd)          enum utcZone = "UTC";
             else static assert(0, "The location of the UTC timezone file on this Posix platform must be set.");
 
             auto tzs = [testTZ("America/Los_Angeles", "PST", "PDT", dur!"hours"(-8), dur!"hours"(1)),
@@ -2077,7 +2078,7 @@ public:
         enum defaultTZDatabaseDir = "";
     }
 
-    private static string getDefaultTZDatabaseDir()
+    private static string getDefaultTZDatabaseDir() @trusted
     {
         import core.stdc.stdlib : getenv;
         import std.string : fromStringz;
@@ -2510,6 +2511,10 @@ public:
                     {
                         auto tzName = de.name[tzDatabaseDir.length .. $];
 
+                        // For the case where tzDatabaseDir does not have a trailing slash.
+                        if (tzName.length > 1 && tzName[0] == '/')
+                            tzName = tzName[1 .. $];
+
                         if (!tzName.extension().empty ||
                             !tzName.startsWith(subName) ||
                             baseName(tzName) == "leapseconds" ||
@@ -2568,6 +2573,119 @@ public:
 
                     if (!canFind(tzNames, tzName))
                         assertThrown!DateTimeException(testPTZFailure(tzName));
+                }
+            }
+        }
+    }
+
+    // https://github.com/dlang/phobos/issues/11000
+    version (Posix) @safe unittest
+    {
+        version (Android)
+        {}
+        else
+        {
+            import std.algorithm.searching : canFind;
+            import std.file : chdir, copy, exists, getcwd, mkdirRecurse, rmdirRecurse, tempDir;
+            import std.path : buildPath;
+
+            immutable baseDir = buildPath(tempDir, "tztest");
+            immutable tzDir = buildPath(baseDir, "tz");
+            immutable tzDirSlash = buildPath(baseDir, "tz/");
+            immutable tzDirDoubleSlash = buildPath(baseDir, "tz//");
+            assert(tzDirSlash[$ - 1] == '/'); // just in case buildPath ever strips the slash
+
+            scope(failure) if (baseDir.exists) rmdirRecurse(baseDir);
+
+            mkdirRecurse(buildPath(tzDir, "America"));
+            mkdirRecurse(buildPath(tzDir, "Europe"));
+
+            copy(buildPath(defaultTZDatabaseDir, "America/Denver"),
+                 buildPath(tzDir, "America/Denver"));
+            copy(buildPath(defaultTZDatabaseDir, "America/Denver"),
+                 buildPath(tzDir, "America/Chicago"));
+            copy(buildPath(defaultTZDatabaseDir, "Europe/London"),
+                 buildPath(tzDir, "Europe/London"));
+            copy(buildPath(defaultTZDatabaseDir, "UTC"),
+                 buildPath(tzDir, "UTC"));
+
+            foreach (dir; [tzDir, tzDirSlash, tzDirDoubleSlash])
+            {
+                {
+                    auto names = getInstalledTZNames("", dir);
+                    assert(names.length == 4);
+                    assert(names.canFind("America/Denver"));
+                    assert(names.canFind("America/Chicago"));
+                    assert(names.canFind("Europe/London"));
+                    assert(names.canFind("UTC"));
+                }
+                {
+                    auto names = getInstalledTZNames("America", dir);
+                    assert(names.length == 2);
+                    assert(names.canFind("America/Denver"));
+                    assert(names.canFind("America/Chicago"));
+                }
+            }
+
+            immutable cwd = getcwd();
+            scope(exit) chdir(cwd);
+
+            chdir(baseDir);
+            foreach (dir; ["tz", "tz/", "tz///"])
+            {
+                {
+                    auto names = getInstalledTZNames("", dir);
+                    assert(names.length == 4);
+                    assert(names.canFind("America/Denver"));
+                    assert(names.canFind("America/Chicago"));
+                    assert(names.canFind("Europe/London"));
+                    assert(names.canFind("UTC"));
+                }
+                {
+                    auto names = getInstalledTZNames("America", dir);
+                    assert(names.length == 2);
+                    assert(names.canFind("America/Denver"));
+                    assert(names.canFind("America/Chicago"));
+                }
+            }
+
+            immutable other = buildPath(baseDir, "other");
+            mkdirRecurse(other);
+            chdir(other);
+            foreach (dir; ["../tz", "../tz/", "..///tz/////"])
+            {
+                {
+                    auto names = getInstalledTZNames("", dir);
+                    assert(names.length == 4);
+                    assert(names.canFind("America/Denver"));
+                    assert(names.canFind("America/Chicago"));
+                    assert(names.canFind("Europe/London"));
+                    assert(names.canFind("UTC"));
+                }
+                {
+                    auto names = getInstalledTZNames("America", dir);
+                    assert(names.length == 2);
+                    assert(names.canFind("America/Denver"));
+                    assert(names.canFind("America/Chicago"));
+                }
+            }
+
+            chdir(tzDir);
+            foreach (dir; [".", "./", ".///"])
+            {
+                {
+                    auto names = getInstalledTZNames("", dir);
+                    assert(names.length == 4);
+                    assert(names.canFind("America/Denver"));
+                    assert(names.canFind("America/Chicago"));
+                    assert(names.canFind("Europe/London"));
+                    assert(names.canFind("UTC"));
+                }
+                {
+                    auto names = getInstalledTZNames("America", dir);
+                    assert(names.length == 2);
+                    assert(names.canFind("America/Denver"));
+                    assert(names.canFind("America/Chicago"));
                 }
             }
         }

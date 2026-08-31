@@ -205,12 +205,22 @@ They met on 24/01/1970.
     $(REG_ROW (?#comment), An inline comment that is ignored while matching.)
     $(REG_ROW (?:regex), Matches subexpression regex,
       $(U not) saving matched portion of text. Useful to speed up matching. )
+    $(REG_ROW (?flags), Inline flags: enables one or more of the matching flags
+        $(S_LINK RegexFlags, i, m, s and x) for the remainder of the pattern. A
+        leading -, as in (?-i), disables the flags that follow instead, so flags
+        can be turned on and off partway through a pattern. The g flag cannot be
+        set inline. )
     $(REG_ROW A|B, Matches subexpression A, or failing that, matches B. )
     $(REG_ROW (?P$(LT)name$(GT)regex), Matches named subexpression
         regex labeling it with name 'name'.
         When referring to a matched portion of text,
         names work like aliases in addition to direct numbers.
      )
+    $(REG_ROW \1$(COMMA) \2 ..., Backreference: matches the same text most
+        recently captured by the capturing group with that number. Groups are
+        numbered from 1 by the position of their opening parenthesis. A
+        multi-digit reference such as \12 denotes group 12 when at least that
+        many capturing groups precede it. )
     $(REG_TITLE Assertions, Match position rather than character )
     $(REG_ROW ^, Matches at the beginning of input or line (in multiline mode).)
     $(REG_ROW $, Matches at the end of input or line (in multiline mode). )
@@ -234,6 +244,15 @@ They met on 24/01/1970.
      )
   )
 
+  $(P $(B Note on performance:) each time a lookahead or lookbehind
+  assertion is reached, its subexpression is matched from scratch by a
+  separate matcher, with no result reused between evaluations. As a result,
+  an assertion whose subexpression contains an unbounded repetition
+  (*, +, {n,}) can make matching take time polynomial in the length of the
+  input, which is most likely to matter for long or untrusted input. Where
+  the pattern allows, avoid repetitions inside lookaround, otherwise
+  consider bounding the input length.)
+
   $(REG_START Character classes )
   $(REG_TABLE
     $(REG_TITLE Pattern element, Semantics )
@@ -246,7 +265,7 @@ They met on 24/01/1970.
      $(I Any sequence of character class elements implicitly forms a union.) )
   )
 
-  $(REG_START Regex flags )
+  $(DDOC_ANCHOR RegexFlags)$(REG_START Regex flags )
   $(REG_TABLE
     $(REG_TITLE Flag, Semantics )
     $(REG_ROW g, Global regex, repeat over the whole input. )
@@ -466,6 +485,17 @@ if (isSomeString!(S))
     assert(indexOf(regexString, 'U') >= 0, "String representation should include flags.");
 }
 
+@system unittest
+{
+    // A loop followed by a small char-alternation (an OrChar, e.g. produced by
+    // case-insensitive matching) should get the same InfiniteBloom prefilter
+    // that a loop followed by a single character does.
+    assert(regex("a*b").filters.length > 0,
+        "loop followed by a single char should build a bloom prefilter");
+    assert(regex("(?i)a*b").filters.length > 0,
+        "loop followed by an OrChar should build a bloom prefilter too");
+}
+
 public auto regexImpl(S)(const S pattern, const(char)[] flags="")
 if (isSomeString!(typeof(pattern)))
 {
@@ -527,6 +557,13 @@ template ctRegexImpl(alias pattern, string flags="")
 /++
     Compile regular expression using CTFE
     and generate optimized native machine code for matching it.
+
+    Note: Unlike $(LREF regex), `ctRegex` always uses a
+    $(LINK2 https://en.wikipedia.org/wiki/Backtracking, backtracking)
+    engine, even for patterns without backreferences. This means
+    matching is not guaranteed to run in linear time. For patterns
+    applied to untrusted input, consider the runtime $(LREF regex),
+    which selects a linear-time engine when possible.
 
     Returns: StaticRegex object for faster matching.
 
@@ -992,8 +1029,12 @@ if (isSomeString!R && isRegexFor!(RegEx, R))
 
 
 /++
-    Start matching `input` to regex pattern `re`,
-    using Thompson NFA matching scheme.
+    Start matching `input` to regex pattern `re`.
+
+    The exact matching scheme (Thompson NFA or backtracking) is chosen
+    automatically based on the pattern; this function does not force a
+    particular engine. It is kept for backwards compatibility and is
+    equivalent to $(LREF bmatch).
 
     The use of this function is $(RED discouraged) - use either of
     $(LREF matchAll) or $(LREF matchFirst).
@@ -1142,9 +1183,12 @@ if (isSomeString!R && isSomeString!String)
 }
 
 /++
-    Start matching of `input` to regex pattern `re`,
-    using traditional $(LINK2 https://en.wikipedia.org/wiki/Backtracking,
-    backtracking) matching scheme.
+    Start matching of `input` to regex pattern `re`.
+
+    The exact matching scheme (Thompson NFA or backtracking) is chosen
+    automatically based on the pattern; this function does not force a
+    particular engine. It is kept for backwards compatibility and is
+    equivalent to $(LREF match).
 
     The use of this function is $(RED discouraged) - use either of
     $(LREF matchAll) or $(LREF matchFirst).

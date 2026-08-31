@@ -842,14 +842,25 @@ version (Posix) private void writeImpl(scope const(char)[] name, scope const(FSC
         scope(failure) core.sys.posix.unistd.close(fd);
 
         immutable size = buffer.length;
-        size_t sum, cnt = void;
+        size_t sum;
         while (sum != size)
         {
-            cnt = (size - sum < 2^^30) ? (size - sum) : 2^^30;
+            size_t cnt = (size - sum < 2^^30) ? (size - sum) : 2^^30;
             const numwritten = core.sys.posix.unistd.write(fd, buffer.ptr + sum, cnt);
-            if (numwritten != cnt)
-                break;
-            sum += numwritten;
+            if (numwritten > 0)
+            {
+                sum += numwritten;
+                continue;
+            }
+            if (numwritten == -1)
+            {
+                if (errno == EINTR)
+                {
+                    continue;
+                }
+                break;  // error
+            }
+            break;
         }
         cenforce(sum == size, name, namez);
     }
@@ -2999,7 +3010,7 @@ Params:
 
 Throws:
     $(LREF FileException) on POSIX or $(LREF WindowsException) on Windows
-    if an error occured.
+    if an error occurred.
  */
 void mkdir(R)(R pathname)
 if (isSomeFiniteCharInputRange!R && !isConvertibleToString!R)
@@ -4416,16 +4427,41 @@ private void copyImpl(scope const(char)[] f, scope const(char)[] t,
             }
             scope(exit) core.stdc.stdlib.free(buf);
 
-            for (auto size = statbufr.st_size; size; )
+            while (true)
             {
-                immutable toxfer = (size > BUFSIZ) ? BUFSIZ : cast(size_t) size;
-                cenforce(
-                    core.sys.posix.unistd.read(fdr, buf, toxfer) == toxfer
-                    && core.sys.posix.unistd.write(fdw, buf, toxfer) == toxfer,
-                    f, fromz);
-                assert(size >= toxfer);
-                size -= toxfer;
+                auto rr = core.sys.posix.unistd.read(fdr, buf, BUFSIZ);
+                if (rr == 0)
+                {
+                    break;
+                }
+                if (rr == -1)
+                {
+                    if (errno == EINTR)
+                    {
+                        continue;
+                    }
+                    cenforce(false, f, fromz);
+                }
+
+                size_t wrAcc = 0;
+                assert(rr > 0);
+                while (wrAcc < rr)
+                {
+                    auto wr = core.sys.posix.unistd.write(
+                        fdw, buf + wrAcc, rr - wrAcc);
+                    if (wr == -1)
+                    {
+                        if (errno == EINTR)
+                        {
+                            continue;
+                        }
+                        cenforce(false, t, toz);
+                    }
+                    cenforce(wr > 0, t, toz);
+                    wrAcc += wr;
+                }
             }
+
             if (preserve)
                 cenforce(fchmod(fdw, to!mode_t(statbufr.st_mode)) == 0, f, fromz);
         }
@@ -4959,13 +4995,45 @@ struct _DirIterator(bool useDIP1000)
         "Please don't override useDIP1000 to disagree with compiler switch.");
 
 private:
-    SafeRefCounted!(DirIteratorImpl, RefCountedAutoInitialize.no) impl;
+    /+
+        @@BUG@@: <https://github.com/dlang/phobos/issues/11068>
+
+        While this `SafeRefCounted` variable is well encapsulated inside this struct,
+        the unsafeness of its destructor in non-DIP1000 builds still bleeds through.
+        By masking its type (achieved by storing it in a static void array)
+        and taking care of destruction and postblitting ourselves,
+        we can expose a `@safe` interface.
+
+        Is it beautiful? No.
+        Is it clean? No.
+        But, yes, it gets the job done. And the code is well enough unittested.
+    +/
+    alias Impl = SafeRefCounted!(DirIteratorImpl, RefCountedAutoInitialize.no);
+    void[Impl.sizeof] _impl;
+
+    // Retain previous API.
+    ref Impl impl() inout @property
+    {
+        return *cast(Impl*)(&_impl);
+    }
 
     this(string pathname, SpanMode mode, bool followSymlink) @trusted
     {
         impl = typeof(impl)(pathname, mode, followSymlink);
     }
+
 public:
+    this(this) @trusted
+    {
+        impl.__postblit();
+    }
+
+    ~this() @trusted
+    {
+        impl.__dtor();
+        impl = Impl.init;
+    }
+
     @property bool empty() @trusted { return impl.empty; }
     @property DirEntry front() @trusted { return impl.front; }
     void popFront() @trusted { impl.popFront(); }

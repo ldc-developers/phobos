@@ -470,7 +470,7 @@ private:
                 if (lenRead == 0)
                 {
                     immutable err = GetLastError();
-                    if (err == NO_ERROR) // sucessfully read a 0-length variable
+                    if (err == NO_ERROR) // successfully read a 0-length variable
                         return sink("");
                     if (err == ERROR_ENVVAR_NOT_FOUND) // variable didn't exist
                         return sink(null);
@@ -1032,14 +1032,18 @@ private Pid spawnProcessPosix(scope const(char[])[] args,
             {
                 version (FreeBSD)
                     import core.sys.freebsd.unistd : closefrom;
+                version (NetBSD)
+                    import core.sys.netbsd.unistd : closefrom;
                 else version (OpenBSD)
                     import core.sys.openbsd.unistd : closefrom;
+                else version (Hurd)
+                    import core.sys.hurd.unistd : closefrom;
 
                 static if (!__traits(compiles, closefrom))
                 {
                     void fallback (int lowfd)
                     {
-                        import core.sys.posix.dirent : dirent, opendir, readdir, closedir, DIR;
+                        import core.sys.posix.dirent : dirfd, dirent, opendir, readdir, closedir, DIR;
                         import core.sys.posix.unistd : close;
                         import core.sys.posix.stdlib : atoi, malloc, free;
                         import core.sys.posix.sys.resource : rlimit, getrlimit, RLIMIT_NOFILE;
@@ -1049,21 +1053,12 @@ private Pid spawnProcessPosix(scope const(char[])[] args,
                         if (getrlimit(RLIMIT_NOFILE, &r) != 0)
                             abortOnError(forkPipeOut, InternalError.getrlimit, .errno);
 
-                        immutable maxDescriptors = cast(int) r.rlim_cur;
+                        immutable maxDescriptors = r.rlim_cur;
 
-                        // Missing druntime declaration
-                        pragma(mangle, "dirfd")
-                        extern(C) nothrow @nogc int dirfd(DIR* dir);
-
-                        DIR* dir = null;
-
-                        // We read from /dev/fd or /proc/self/fd only if the limit is high enough
-                        if (maxDescriptors > 128*1024)
-                        {
-                            // Try to open the directory /dev/fd or /proc/self/fd
-                            dir = opendir("/dev/fd");
-                            if (dir is null) dir = opendir("/proc/self/fd");
-                        }
+                        // Always try /dev/fd enumeration first — it's the most
+                        // efficient approach and handles unlimited RLIMIT_NOFILE.
+                        DIR* dir = opendir("/dev/fd");
+                        if (dir is null) dir = opendir("/proc/self/fd");
 
                         // If we have a directory, close all file descriptors except stdin, stdout, and stderr
                         if (dir)
@@ -1090,9 +1085,9 @@ private Pid spawnProcessPosix(scope const(char[])[] args,
                         }
                         else
                         {
-                            // This is going to allocate 8 bytes for each possible file descriptor from lowfd to r.rlim_cur
                             if (maxDescriptors <= 128*1024)
                             {
+                                // This is going to allocate 8 bytes for each possible file descriptor from lowfd to rlim_cur.
                                 // NOTE: malloc() and getrlimit() are not on the POSIX async
                                 // signal safe functions list, but practically this should
                                 // not be a problem. Java VM and CPython also use malloc()
@@ -1100,7 +1095,7 @@ private Pid spawnProcessPosix(scope const(char[])[] args,
                                 import core.stdc.stdlib : malloc;
                                 import core.sys.posix.poll : pollfd, poll, POLLNVAL;
 
-                                immutable maxToClose = maxDescriptors - lowfd;
+                                immutable maxToClose = cast(int)(maxDescriptors - lowfd);
 
                                 // Call poll() to see which ones are actually open:
                                 auto pfds = cast(pollfd*) malloc(pollfd.sizeof * maxToClose);
@@ -1129,8 +1124,22 @@ private Pid spawnProcessPosix(scope const(char[])[] args,
                             else
                             {
                             LslowClose:
-                                // Fall back to closing everything.
-                                foreach (i; lowfd .. maxDescriptors)
+                                // Last-resort fallback: close every descriptor from
+                                // lowfd up to a fixed cap. This path is only reached on
+                                // obscure systems lacking both /dev/fd and /proc/self/fd
+                                // *and* where poll() failed, so it is essentially never
+                                // taken in practice.
+                                //
+                                // The cap of 1_048_576 (2^20) is deliberately arbitrary:
+                                // rlim_cur may be huge or RLIM_INFINITY, and blindly
+                                // iterating to it could mean closing billions of mostly
+                                // non-existent descriptors. No realistic process has
+                                // anywhere near 1M descriptors actually open, so capping
+                                // here is effectively "close everything" while keeping the
+                                // worst case bounded. Any similarly large value would do.
+                                immutable closeMax = cast(int)
+                                    (maxDescriptors > 1_048_576 ? 1_048_576 : maxDescriptors);
+                                foreach (i; lowfd .. closeMax)
                                 {
                                     close(i);
                                 }
@@ -1251,18 +1260,11 @@ private Pid spawnProcessPosix(scope const(char[])[] args,
     {
         closePipeWriteEnds();
 
-        T retryInterrupted(T)(scope T delegate() syscall)
-        {
-            import core.stdc.errno : errno, EINTR;
-            T result;
-            do
-                result = syscall();
-            while (result == -1 && .errno == EINTR);
-            return result;
-        }
+        import std.internal.retry : retryOnEINTR;
 
         auto status = InternalError.noerror;
-        auto readExecResult = retryInterrupted(() => core.sys.posix.unistd.read(forkPipe[0], &status, status.sizeof));
+        auto readExecResult = retryOnEINTR(
+            () => core.sys.posix.unistd.read(forkPipe[0], &status, status.sizeof));
         // Save error number just in case if subsequent "waitpid" fails and overrides errno
         immutable lastError = .errno;
 
@@ -1271,7 +1273,7 @@ private Pid spawnProcessPosix(scope const(char[])[] args,
             // Forked child exits right after creating second fork. So it should be safe to wait here.
             import core.sys.posix.sys.wait : waitpid;
             int waitResult;
-            retryInterrupted(() => waitpid(id, &waitResult, 0));
+            retryOnEINTR(() => waitpid(id, &waitResult, 0));
         }
 
         if (readExecResult == -1)
@@ -1281,7 +1283,7 @@ private Pid spawnProcessPosix(scope const(char[])[] args,
         if (status != InternalError.noerror)
         {
             int error;
-            readExecResult = retryInterrupted(() => read(forkPipe[0], &error, error.sizeof));
+            readExecResult = retryOnEINTR(() => read(forkPipe[0], &error, error.sizeof));
             string errorMsg;
             final switch (status)
             {
@@ -1801,6 +1803,44 @@ version (Posix) @system unittest
                 ": Warning: Couldn't find any way to check open files");
     }
     testFDs();
+}
+
+// Test that spawning a process works when RLIMIT_NOFILE is very large.
+// Regression test: a cast(int) of rlim_cur caused overflow when the limit
+// was unlimited (RLIM_INFINITY), making the fd-closing code attempt a
+// massive malloc that would fail with "Cannot allocate memory".
+version (Posix) @system unittest
+{
+    import core.sys.posix.sys.resource : rlimit, rlim_t, getrlimit, setrlimit, RLIMIT_NOFILE;
+
+    // This test only applies on platforms where rlim_t can exceed int.max.
+    static if (rlim_t.sizeof > int.sizeof)
+    {
+        // Save current limit
+        rlimit originalLimit;
+        if (getrlimit(RLIMIT_NOFILE, &originalLimit) != 0)
+            return; // Can't test if we can't get the limit
+
+        // Set RLIMIT_NOFILE to a value that overflows int (> int.max)
+        rlimit highLimit;
+        highLimit.rlim_cur = cast(rlim_t) int.max + 1;
+        highLimit.rlim_max = originalLimit.rlim_max;
+
+        // If we can't raise the limit (e.g. no permission), try with rlim_max
+        if (setrlimit(RLIMIT_NOFILE, &highLimit) != 0)
+        {
+            highLimit.rlim_cur = originalLimit.rlim_max;
+            if (highLimit.rlim_cur <= int.max)
+                return; // Can't set a high enough limit to test the overflow
+            if (setrlimit(RLIMIT_NOFILE, &highLimit) != 0)
+                return;
+        }
+        scope(exit) setrlimit(RLIMIT_NOFILE, &originalLimit);
+
+        // This should not throw "Failed to allocate memory"
+        TestScript prog = "exit 0";
+        assert(execute(prog.path).status == 0);
+    }
 }
 
 @system unittest // Environment variables in spawnProcess().

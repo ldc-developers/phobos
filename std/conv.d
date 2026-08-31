@@ -1051,7 +1051,7 @@ if (!(is(S : T) &&
     {
         import std.array : appender;
         // other string-to-string
-        //Use Appender directly instead of toStr, which also uses a formatedWrite
+        // Use Appender directly instead of toStr, which also uses a formattedWrite
         auto w = appender!T();
         w.put(value);
         return w.data;
@@ -1258,7 +1258,7 @@ private template isSwitchable(E)
 //Static representation of the index I of the enum S,
 //In representation T.
 //T must be an immutable string (avoids un-necessary initializations).
-private template enumRep(T, S, S value)
+private template enumRep(T, S, immutable S value)
 if (is (T == immutable) && isExactSomeString!T && is(S == enum))
 {
     static T enumRep = toStr!T(value);
@@ -1403,6 +1403,20 @@ if (is (T == immutable) && isExactSomeString!T && is(S == enum))
     S s; s.c = new C();
     assert(to!string(s) == "C");
 }
+
+// https://github.com/dlang/phobos/issues/10568
+@safe unittest
+{
+    enum E { One }
+
+    inout(E) fun(inout(E) e)
+    {
+        import std.conv;
+        auto s = e.to!string;
+        return e;
+    }
+}
+
 
 @safe unittest
 {
@@ -5571,7 +5585,7 @@ if (isIntegral!T && isOutputRange!(W, char))
     else
     {
         UnsignedStringBuf buf = void;
-        put(writer, unsignedToTempString(value, buf));
+        put(writer, unsignedToTempString(cast(Unsigned!T) value, buf));
     }
 }
 
@@ -6094,7 +6108,7 @@ if ((radix == 2 || radix == 8 || radix == 10 || radix == 16) &&
 
                 char[] t = value < 0
                     ?   signedToTempString!(10, false, char)(value, buf)
-                    : unsignedToTempString!(10, false, char)(value, buf);
+                    : unsignedToTempString!(10, false, char)(cast(Unsigned!UT) value, buf);
 
                 lwr = cast(uint) (buf.length - t.length);
                 upr = cast(uint) buf.length;

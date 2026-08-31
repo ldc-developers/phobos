@@ -274,7 +274,7 @@ EXTRA_MODULES_INTERNAL := $(addprefix std/, \
 	algorithm/internal \
 	$(addprefix internal/, \
 		cstring memory digest/sha_SSSE3 \
-		entropy \
+		entropy retry \
 		$(addprefix math/, biguintcore biguintnoasm biguintx86	\
 						   errorfunction gammafunction ) \
 		scopebuffer test/dummyrange test/range \
@@ -309,7 +309,7 @@ else
 endif
 
 # build with shared library support (defaults to true on supported platforms)
-SHARED=$(if $(findstring $(OS),linux freebsd),1,)
+SHARED=$(if $(findstring $(OS),linux freebsd hurd),1,)
 
 TESTS_EXTRACTOR=$(ROOT)/tests_extractor$(DOTEXE)
 PUBLICTESTS_DIR=$(ROOT)/publictests
@@ -633,7 +633,7 @@ style_lint_shellcmds:
 	grep -nrE '[^"]cast\([^)]*?\)[[:alnum:]]' $$(find etc std -name '*.d') ; test $$? -eq 1
 
 	@echo "Enforce space between a .. b"
-	grep -nrE '[[:alnum:]][.][.][[:alnum:]]|[[:alnum:]] [.][.][[:alnum:]]|[[:alnum:]][.][.] [[:alnum:]]' $$(find etc std -name '*.d' | grep -vE 'std/string.d|std/uni/package.d') ; test $$? -eq 1
+	grep -nrE '[[:alnum:]][.][.][[:alnum:]]|[[:alnum:]] [.][.][[:alnum:]]|[[:alnum:]][.][.] [[:alnum:]]' $$(find etc std -name '*.d' | grep -vE 'std/string.d|std/uni/package.d|std/regex/internal/ir.d') ; test $$? -eq 1
 
 	@echo "Enforce space between binary operators"
 	grep -nrE "[[:alnum:]](==|!=|<=|<<|>>|>>>|^^)[[:alnum:]]|[[:alnum:]] (==|!=|<=|<<|>>|>>>|^^)[[:alnum:]]|[[:alnum:]](==|!=|<=|<<|>>|>>>|^^) [[:alnum:]]" $$(find etc std -name '*.d'); test $$? -eq 1

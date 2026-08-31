@@ -107,6 +107,12 @@ package(std) string regexOptionsToString()(uint flags) nothrow pure @safe
     return buffer[0 .. pos].idup;
 }
 
+/// True if `a` and `b` match under simple Unicode case folding (for `/i` backrefs).
+bool equalCasefold(dchar lhs, dchar rhs) @safe pure nothrow @nogc
+{
+    return simpleCaseCmp(lhs, rhs) == 0;
+}
+
 // flags that allow guide execution of engine
 enum RegexInfo : uint { oneShot = 0x80 }
 
@@ -141,11 +147,12 @@ enum IR:uint {
     Wordboundary       = 0b1_01001_00, //boundary of a word
     Notwordboundary    = 0b1_01010_00, //not a word boundary
     Backref            = 0b1_01011_00, //backreference to a group (that has to be pinned, i.e. locally unique) (group index)
+    BackrefI           = 0b1_10010_00, //case-insensitive backreference (casefold at parse position)
     GroupStart         = 0b1_01100_00, //start of a group (x) (groupIndex+groupPinning(1bit))
     GroupEnd           = 0b1_01101_00, //end of a group (x) (groupIndex+groupPinning(1bit))
     Option             = 0b1_01110_00, //start of an option within an alternation x | y (length)
     GotoEndOr          = 0b1_01111_00, //end of an option (length of the rest)
-    Bof                = 0b1_10000_00, //begining of "file" (string) ^
+    Bof                = 0b1_10000_00, //beginning of "file" (string) ^
     Eof                = 0b1_10001_00, //end of "file" (string) $
     //... any additional atoms here
 
@@ -324,14 +331,14 @@ struct Bytecode
     //mark as local reference (for backrefs in lookarounds)
     void setLocalRef()
     {
-        assert(code == IR.Backref);
+        assert(code == IR.Backref || code == IR.BackrefI);
         raw = raw | 1 << 23;
     }
 
     //is a local ref
     @property bool localRef() const
     {
-        assert(code == IR.Backref);
+        assert(code == IR.Backref || code == IR.BackrefI);
         return (raw & 1 << 23) != 0;
     }
 
@@ -392,7 +399,7 @@ struct Group(DataIndex)
 
     @trusted string toString()() const
     {
-        if (begin < end)
+        if (begin > end)
             return "(unmatched)";
         import std.array : appender;
         import std.format.write : formattedWrite;
@@ -400,6 +407,21 @@ struct Group(DataIndex)
         formattedWrite(a, "%s..%s", begin, end);
         return a.data;
     }
+}
+
+@safe unittest
+{
+    Group!size_t matched = { begin: 2, end: 5 };
+    assert(cast(bool) matched);
+    assert(matched.toString == "2..5");
+
+    Group!size_t empty = { begin: 3, end: 3 };
+    assert(cast(bool) empty);
+    assert(empty.toString == "3..3");
+
+    Group!size_t unmatched;
+    assert(!cast(bool) unmatched);
+    assert(unmatched.toString == "(unmatched)");
 }
 
 //debugging tool, prints out instruction along with opcodes
@@ -453,10 +475,10 @@ debug(std_regex_parser) @trusted string disassemble(in Bytecode[] irb, uint pc, 
         uint start = irb[pc+1].raw, end = irb[pc+2].raw;
         formattedWrite(output, " pc=>%u [%u..%u]", pc + len + IRL!(IR.LookaheadStart), start, end);
         break;
-    case IR.Backref: case IR.CodepointSet: case IR.Trie:
+    case IR.Backref: case IR.BackrefI: case IR.CodepointSet: case IR.Trie:
         uint n = irb[pc].data;
         formattedWrite(output, " %u",  n);
-        if (irb[pc].code == IR.Backref)
+        if (irb[pc].code == IR.Backref || irb[pc].code == IR.BackrefI)
             formattedWrite(output, " %s", irb[pc].localRef ? "local" : "global");
         break;
     default://all data-free instructions
@@ -1002,7 +1024,7 @@ struct CharMatcher {
 // Internal non-resizeble array, switches between inline storage and CoW
 // POD-only
 struct SmallFixedArray(T, uint SMALL=3)
-if (!hasElaborateDestructor!T)
+if (!__traits(needsDestruction, T))
 {
     import std.internal.memory : enforceMalloc;
     import core.memory : pureFree;
