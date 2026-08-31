@@ -45,8 +45,16 @@ immutable
      * The vendor specific version number, as in
      * version_major.version_minor
      */
-    uint version_major = __VERSION__ / 1000;
-    uint version_minor = __VERSION__ % 1000;    /// ditto
+    version (LDC)
+    {
+        uint version_major = __LDC_VERSION__ / 1000;
+        uint version_minor = __LDC_VERSION__ % 1000;    /// ditto
+    }
+    else
+    {
+        uint version_major = __VERSION__ / 1000;
+        uint version_minor = __VERSION__ % 1000;    /// ditto
+    }
 
 
     /**
