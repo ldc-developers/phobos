@@ -1308,7 +1308,7 @@ Returns:
 */
 private auto extremum(alias map, alias selector = "a < b", Range)(Range r)
 if (isInputRange!Range && !isInfinite!Range &&
-    is(typeof(unaryFun!map(ElementType!(Range).init))))
+    is(typeof(unaryFun!map(rvalueOf!(ElementType!Range)))))
 in
 {
     assert(!r.empty, "r is an empty range");
@@ -1328,7 +1328,7 @@ private auto extremum(alias map, alias selector = "a < b", Range,
                      (Range r, RangeElementType seedElement)
 if (isInputRange!Range && !isInfinite!Range &&
     !is(CommonType!(ElementType!Range, RangeElementType) == void) &&
-     is(typeof(unaryFun!map(ElementType!(Range).init))))
+     is(typeof(unaryFun!map(rvalueOf!(ElementType!Range)))))
 {
     import std.typecons : Rebindable2;
 
@@ -1367,7 +1367,7 @@ if (isInputRange!Range && !isInfinite!Range &&
     }
     else
     {
-        alias MapType = Unqual!(typeof(mapFun(CommonElement.init)));
+        alias MapType = Unqual!(typeof(mapFun(rvalueOf!CommonElement)));
         MapType extremeElementMapped = mapFun(extremeElement.get);
 
         // direct access via a random access range is faster
@@ -1402,7 +1402,7 @@ if (isInputRange!Range && !isInfinite!Range &&
 
 private auto extremum(alias selector = "a < b", Range)(Range r)
 if (isInputRange!Range && !isInfinite!Range &&
-    !is(typeof(unaryFun!selector(ElementType!(Range).init))))
+    !is(typeof(unaryFun!selector(rvalueOf!(ElementType!Range)))))
 {
     return extremum!(a => a, selector)(r);
 }
@@ -1413,7 +1413,7 @@ private auto extremum(alias selector = "a < b", Range,
                      (Range r, RangeElementType seedElement)
 if (isInputRange!Range && !isInfinite!Range &&
     !is(CommonType!(ElementType!Range, RangeElementType) == void) &&
-    !is(typeof(unaryFun!selector(ElementType!(Range).init))))
+    !is(typeof(unaryFun!selector(rvalueOf!(ElementType!Range)))))
 {
     return extremum!(a => a, selector)(r, seedElement);
 }

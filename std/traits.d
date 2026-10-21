@@ -848,13 +848,13 @@ private template fqnType(T,
     {
         import std.conv : to;
         enum fqnType = chain!(
-            fqnType!(typeof(T.init[0]), qualifiers) ~ "[" ~ to!string(T.length) ~ "]"
+            fqnType!(typeof(lvalueOf!T[0]), qualifiers) ~ "[" ~ to!string(T.length) ~ "]"
         );
     }
     else static if (isArray!T)
     {
         enum fqnType = chain!(
-            fqnType!(typeof(T.init[0]), qualifiers) ~ "[]"
+            fqnType!(typeof(lvalueOf!T[0]), qualifiers) ~ "[]"
         );
     }
     else static if (isAssociativeArray!T)
@@ -2575,7 +2575,7 @@ template hasNested(T)
     import std.meta : Filter;
 
     static if (isStaticArray!T && T.length)
-        enum hasNested = hasNested!(typeof(T.init[0]));
+        enum hasNested = hasNested!(typeof(lvalueOf!T[0]));
     else static if (is(T == class) || is(T == struct) || is(T == union))
     {
         // prevent infinite recursion for class with member of same type
@@ -3659,12 +3659,12 @@ template hasElaborateAssign(S)
 {
     static if (isStaticArray!S && S.length)
     {
-        enum bool hasElaborateAssign = hasElaborateAssign!(typeof(S.init[0]));
+        enum bool hasElaborateAssign = hasElaborateAssign!(typeof(lvalueOf!S[0]));
     }
     else static if (is(S == struct))
     {
-        enum hasElaborateAssign = is(typeof(S.init.opAssign(rvalueOf!S))) ||
-                                  is(typeof(S.init.opAssign(lvalueOf!S))) ||
+        enum hasElaborateAssign = is(typeof(lvalueOf!S.opAssign(rvalueOf!S))) ||
+                                  is(typeof(lvalueOf!S.opAssign(lvalueOf!S))) ||
             anySatisfy!(.hasElaborateAssign, FieldTypeTuple!S);
     }
     else
@@ -4842,6 +4842,23 @@ if (is(T == class))
 // Type Conversion
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::://
 
+// A struct's `.init` builds its whole literal, so a function result of the type stands in
+// for it. Other operands keep `.init`, whose null and array literals merge differently in `?:`.
+// Operands can be values as well as types: `among` passes its values through `CommonType`.
+private enum isAggregateOperand(T...) = is(T[0] == struct) || is(T[0] == union);
+
+private template CommonTypeOfTwo(T...)
+{
+    static if (isAggregateOperand!(T[0]) && isAggregateOperand!(T[1]))
+        alias CommonTypeOfTwo = typeof(true ? rvalueOf!(T[0]) : rvalueOf!(T[1]));
+    else static if (isAggregateOperand!(T[0]))
+        alias CommonTypeOfTwo = typeof(true ? rvalueOf!(T[0]) : T[1].init);
+    else static if (isAggregateOperand!(T[1]))
+        alias CommonTypeOfTwo = typeof(true ? T[0].init : rvalueOf!(T[1]));
+    else
+        alias CommonTypeOfTwo = typeof(true ? T[0].init : T[1].init);
+}
+
 /**
 Get the type that all types can be implicitly converted to. Useful
 e.g. in figuring out an array type from a bunch of initializing
@@ -4851,8 +4868,13 @@ types have no common type.
 template CommonType(T...)
 {
     static if (T.length == 1)
-        alias CommonType = typeof(T[0].init);
-    else static if (is(typeof(true ? T[0].init : T[1].init) U))
+    {
+        static if (isAggregateOperand!(T[0]))
+            alias CommonType = typeof(rvalueOf!(T[0]));
+        else
+            alias CommonType = typeof(T[0].init);
+    }
+    else static if (is(CommonTypeOfTwo!(T[0], T[1]) U))
         alias CommonType = CommonType!(U, T[2 .. $]);
     else
         alias CommonType = void;
@@ -5773,7 +5795,7 @@ Note: Trying to use returned value will result in a
  */
 template BooleanTypeOf(T)
 {
-    static if (is(typeof(__traits(getMember, T.init, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
+    static if (is(typeof(__traits(getMember, lvalueOf!T, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
         alias X = BooleanTypeOf!AT;
     else
         alias X = OriginalType!T;
@@ -5824,7 +5846,7 @@ template BooleanTypeOf(T)
  */
 template IntegralTypeOf(T)
 {
-    static if (is(typeof(__traits(getMember, T.init, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
+    static if (is(typeof(__traits(getMember, lvalueOf!T, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
         alias X = IntegralTypeOf!AT;
     else
         alias X = OriginalType!T;
@@ -5860,7 +5882,7 @@ template IntegralTypeOf(T)
  */
 template FloatingPointTypeOf(T)
 {
-    static if (is(typeof(__traits(getMember, T.init, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
+    static if (is(typeof(__traits(getMember, lvalueOf!T, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
         alias X = FloatingPointTypeOf!AT;
     else
         alias X = OriginalType!T;
@@ -5945,7 +5967,7 @@ template SignedTypeOf(T)
  */
 template CharTypeOf(T)
 {
-    static if (is(typeof(__traits(getMember, T.init, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
+    static if (is(typeof(__traits(getMember, lvalueOf!T, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
         alias X = CharTypeOf!AT;
     else
         alias X = OriginalType!T;
@@ -5986,7 +6008,7 @@ template CharTypeOf(T)
  */
 template StaticArrayTypeOf(T)
 {
-    static if (is(typeof(__traits(getMember, T.init, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
+    static if (is(typeof(__traits(getMember, lvalueOf!T, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
         alias X = StaticArrayTypeOf!AT;
     else
         alias X = OriginalType!T;
@@ -6143,7 +6165,7 @@ template StringTypeOf(T)
  */
 template AssocArrayTypeOf(T)
 {
-    static if (is(typeof(__traits(getMember, T.init, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
+    static if (is(typeof(__traits(getMember, lvalueOf!T, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
         alias X = AssocArrayTypeOf!AT;
     else
         alias X = OriginalType!T;
@@ -6184,7 +6206,7 @@ template BuiltinTypeOf(T)
         alias BuiltinTypeOf = void;
     else
     {
-        static if (is(typeof(__traits(getMember, T.init, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
+        static if (is(typeof(__traits(getMember, lvalueOf!T, __traits(getAliasThis, T)[0])) AT) && !is(AT[] == AT))
             alias X = BuiltinTypeOf!AT;
         else
             alias X = OriginalType!T;
@@ -7273,7 +7295,11 @@ enum bool isAggregateType(T) = is(T == struct) || is(T == union) ||
  * that define `opApply` with a single loop variable, and builtin dynamic,
  * static and associative arrays.
  */
-enum bool isIterable(T) = is(typeof({ foreach (elem; T.init) {} }));
+// `*p` is for an opApply taking a `@safe` delegate: in a function literal whose attributes are
+// inferred, a call to the bodyless `lvalueOf!T` or `rvalueOf!T` makes the loop body's delegate
+// `@system`. `rvalueOf!T` is for a non-copyable range, which `foreach` over `*p` would copy.
+enum bool isIterable(T) = is(typeof({ T* p = null; foreach (elem; *p) {} }))
+                       || is(typeof({ foreach (elem; rvalueOf!T) {} }));
 
 ///
 @safe unittest
@@ -7296,6 +7322,28 @@ enum bool isIterable(T) = is(typeof({ foreach (elem; T.init) {} }));
     static assert( isIterable!Range);
 
     static assert(!isIterable!uint);
+}
+
+// `opApply` with a `ref` `@safe` delegate, and a range that cannot be copied
+@safe unittest
+{
+    static struct SafeOpApply
+    {
+        int opApply(scope int delegate(ref int) @safe dg) @safe { int x; return dg(x); }
+    }
+
+    static struct NoCopyRange
+    {
+        @disable this(this);
+        enum bool empty = false;
+        int front() { return 0; }
+        void popFront() {}
+    }
+
+    static assert(isIterable!SafeOpApply);
+    static assert(isIterable!NoCopyRange);
+    static assert(is(ForeachType!SafeOpApply == int));
+    static assert(is(ForeachType!NoCopyRange == int));
 }
 
 /**
@@ -8057,15 +8105,32 @@ has both opApply and a range interface.
 */
 template ForeachType(T)
 {
-    alias ForeachType = typeof(
-    (inout int x = 0)
+    // See `isIterable` for the two forms.
+    static if (is(typeof({ T* p = null; foreach (elem; *p) {} })))
     {
-        foreach (elem; T.init)
+        alias ForeachType = typeof(
+        (inout int x = 0)
         {
-            return elem;
-        }
-        assert(0);
-    }());
+            T* p = null;
+            foreach (elem; *p)
+            {
+                return elem;
+            }
+            assert(0);
+        }());
+    }
+    else
+    {
+        alias ForeachType = typeof(
+        (inout int x = 0)
+        {
+            foreach (elem; rvalueOf!T)
+            {
+                return elem;
+            }
+            assert(0);
+        }());
+    }
 }
 
 ///
@@ -9044,7 +9109,23 @@ enum bool allSameType(Ts...) =
    Returns: `true` iff the type `T` can be tested in an $(D
    if)-expression, that is if $(D if (pred(T.init)) {}) is compilable.
 */
-enum ifTestable(T, alias pred = a => a) = __traits(compiles, { if (pred(T.init)) {} });
+template ifTestable(T, alias pred = a => a)
+{
+    static if (isAggregateOperand!T)
+    {
+        // See `CommonType`: only a struct or union operand avoids `.init`. The literal `T.init`
+        // is unique, so where `pred` does not take a `T` it converted to any other qualifier of
+        // `T`; an rvalue of each stands in.
+        enum testable(U) = __traits(compiles, { if (pred(rvalueOf!U)) {} });
+        alias U = Unqual!T;
+        static if (__traits(compiles, pred(rvalueOf!T)))
+            enum ifTestable = testable!T;
+        else
+            enum ifTestable = anySatisfy!(testable, U, const U, immutable U, shared U, shared const U);
+    }
+    else
+        enum ifTestable = __traits(compiles, { if (pred(T.init)) {} });
+}
 
 ///
 @safe unittest
@@ -9073,6 +9154,22 @@ enum ifTestable(T, alias pred = a => a) = __traits(compiles, { if (pred(T.init))
     static assert(allSatisfy!(ifTestable, AliasSeq!(bool, int, float, double, string)));
     struct BoolWrapper { bool value; }
     static assert(!ifTestable!(bool, a => BoolWrapper(a)));
+}
+
+@safe unittest
+{
+    class C {}
+    static assert( ifTestable!(int, (ubyte a) => a));
+    static assert( ifTestable!(int*, (immutable(int)* p) => p));
+    static assert( ifTestable!(int[], (immutable(int)[] a) => a));
+    static assert( ifTestable!(C, (immutable C c) => c));
+
+    struct P
+    {
+        int* p;
+        bool opCast(T : bool)() const { return p !is null; }
+    }
+    static assert( ifTestable!(P, (immutable P a) => a));
 }
 
 /**

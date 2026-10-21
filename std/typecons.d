@@ -531,8 +531,8 @@ private enum areCompatibleTuples(Tup1, Tup2, string op) =
     {
         static foreach (i; 0 .. Tup1.Types.length)
         {{
-            auto lhs = typeof(tup1.field[i]).init;
-            auto rhs = typeof(tup2.field[i]).init;
+            auto lhs = rvalueOf!(typeof(tup1.field[i]));
+            auto rhs = rvalueOf!(typeof(tup2.field[i]));
             static if (op == "=")
                 lhs = rhs;
             else
@@ -681,7 +681,7 @@ if (distinctFieldNames!(Specs))
             {
                 static foreach (i; 0 .. Types.length)   // Rely on the field layout
                 {
-                    static assert(typeof(return).init.tupleof[i].offsetof ==
+                    static assert(typeof(return).tupleof[i].offsetof ==
                                                        expand[i].offsetof);
                 }
                 return *cast(typeof(return)*) &(field[0]);
@@ -2274,10 +2274,13 @@ template tuple(Names...)
     Returns:
         true if `T` is a `Tuple` type, false otherwise.
  */
-enum isTuple(T) = __traits(compiles,
+// The `is` covers qualified tuples whose fields have indirections, which the call below
+// cannot convert to the mutable `Tuple`.
+enum isTuple(T) = is(Unqual!T == Tuple!Specs, Specs...) ||
+                  __traits(compiles,
                            {
                                void f(Specs...)(Tuple!Specs tup) {}
-                               f(T.init);
+                               f(rvalueOf!T);
                            } );
 
 ///
@@ -2294,6 +2297,8 @@ enum isTuple(T) = __traits(compiles,
 {
     static assert(isTuple!(const Tuple!(int)));
     static assert(isTuple!(immutable Tuple!(int)));
+    static assert(isTuple!(const Tuple!(int[], int)));
+    static assert(isTuple!(immutable Tuple!(int*)));
 
     static assert(!isTuple!(int));
     static assert(!isTuple!(const int));
@@ -2445,11 +2450,11 @@ struct Rebindable(T)
 if (!is(T == class) && !is(T == interface) && !isDynamicArray!T && !isAssociativeArray!T)
 {
 private:
-    static if (isAssignable!(typeof(cast() T.init)))
+    static if (isAssignable!(typeof(cast() rvalueOf!T)))
     {
         enum useQualifierCast = true;
 
-        typeof(cast() T.init) data;
+        typeof(cast() rvalueOf!T) data;
     }
     else
     {
@@ -3003,11 +3008,11 @@ Rebindable!T rebindable(T)(Rebindable!T obj)
 package(std) struct Rebindable2(T)
 {
 private:
-    static if (isAssignable!(typeof(cast() T.init)))
+    static if (isAssignable!(typeof(cast() rvalueOf!T)))
     {
         enum useQualifierCast = true;
 
-        typeof(cast() T.init) data;
+        typeof(cast() rvalueOf!T) data;
     }
     else
     {
@@ -4834,7 +4839,7 @@ template apply(alias fun)
     auto apply(T)(auto ref T t)
     if (isInstanceOf!(Nullable, T))
     {
-        alias FunType = typeof(unaryFun!fun(T.init.get));
+        alias FunType = typeof(unaryFun!fun(rvalueOf!T.get));
 
         enum MustWrapReturn = !isInstanceOf!(Nullable, FunType);
 
