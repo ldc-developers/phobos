@@ -1083,6 +1083,10 @@ private:
             {
                 resetIeeeFlags();
             }
+            else version (RISCV_Any)
+            {
+                resetIeeeFlags();
+            }
             else version (LoongArch_Any)
             {
                 resetIeeeFlags();
